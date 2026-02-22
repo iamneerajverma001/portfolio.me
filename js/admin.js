@@ -58,6 +58,7 @@
   let syncPullInFlight = false;
   let snapshotSaveTimer = null;
   let syncRelayIssueNotified = false;
+  let syncSkipWarningTimer = null;
   const DEFAULT_HERO_SETTINGS = {
     design: 'diagonal',
     color1: '#041229',
@@ -199,6 +200,21 @@
 
     const suffix = message ? ` | ${String(message).trim()}` : '';
     statusNode.textContent = `Drive Sync: ${source} | Endpoint: ${endpointState} | Secret: ${secretState}${suffix}`;
+  }
+
+  function showSyncSkipWarning(skippedCount) {
+    if (!adminPanel || !Number.isFinite(skippedCount) || skippedCount <= 0) return;
+
+    updateAdminSyncStatus(`⚠ Skipped ${skippedCount} oversized item(s) from sync payload.`);
+    if (syncSkipWarningTimer) {
+      window.clearTimeout(syncSkipWarningTimer);
+      syncSkipWarningTimer = null;
+    }
+
+    syncSkipWarningTimer = window.setTimeout(() => {
+      syncSkipWarningTimer = null;
+      updateAdminSyncStatus();
+    }, 3600);
   }
 
   function setupDriveUploadConfig() {
@@ -1394,6 +1410,7 @@
   function collectPortfolioStorageData() {
     const data = {};
     let totalBytes = 0;
+    let skippedCount = 0;
 
     for (let index = 0; index < localStorage.length; index += 1) {
       const key = localStorage.key(index);
@@ -1407,12 +1424,22 @@
           : value;
 
         const entryBytes = estimateUtf8Bytes(normalizedValue);
-        if (entryBytes > SYNC_MAX_VALUE_BYTES) continue;
-        if (totalBytes + entryBytes > SYNC_MAX_TOTAL_BYTES) continue;
+        if (entryBytes > SYNC_MAX_VALUE_BYTES) {
+          skippedCount += 1;
+          continue;
+        }
+        if (totalBytes + entryBytes > SYNC_MAX_TOTAL_BYTES) {
+          skippedCount += 1;
+          continue;
+        }
 
         data[key] = normalizedValue;
         totalBytes += entryBytes;
       }
+    }
+
+    if (skippedCount > 0) {
+      showSyncSkipWarning(skippedCount);
     }
 
     return data;
