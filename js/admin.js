@@ -55,6 +55,7 @@
   let syncPollTimer = null;
   let syncPullInFlight = false;
   let snapshotSaveTimer = null;
+  let syncRelayIssueNotified = false;
   const DEFAULT_HERO_SETTINGS = {
     design: 'diagonal',
     color1: '#041229',
@@ -459,7 +460,14 @@
 
     const result = await response.json();
     if (!result || result.ok === false) {
-      throw new Error(String(result?.error || 'Sync relay request failed.'));
+      const message = String(result?.error || 'Sync relay request failed.');
+
+      if (!syncRelayIssueNotified && /missing file payload|unauthorized secret/i.test(message)) {
+        syncRelayIssueNotified = true;
+        window.alert('Drive Cloud Sync relay is using an old Apps Script deployment or wrong secret. Redeploy the latest Apps Script version and verify Drive Upload secret.');
+      }
+
+      throw new Error(message);
     }
 
     return result;
