@@ -2909,13 +2909,8 @@
   }
 
   function initAdminRuntime() {
-    const canUseAdmin = isAdminHostAllowed();
-    const blockAutoOpenOnPhone = isPhoneLikeViewport();
-
-    if (blockAutoOpenOnPhone) {
-      setAdminUnlocked(false);
-      setAdminModeAutoPush(false);
-    }
+    setAdminUnlocked(false);
+    setAdminModeAutoPush(false);
 
     performBackgroundCleanupOnce();
     scrubStoredSyncTokenIfDriveRelayEnabled();
@@ -2935,19 +2930,8 @@
     pullSyncFromRemote({ manual: false });
 
     enforceLockedEditingState();
-
-    if (canUseAdmin && isAdminUnlocked() && !blockAutoOpenOnPhone) {
-      setAdminModeAutoPush(true);
-      createAdminPanel();
-      makeEditable(true);
-      refreshProjectEditButtons(true);
-    }
-
-    if (!canUseAdmin || !isAdminUnlocked()) {
-      setAdminModeAutoPush(false);
-      makeEditable(false);
-      refreshProjectEditButtons(false);
-    }
+    makeEditable(false);
+    refreshProjectEditButtons(false);
     sortProjectTilesByYear();
     sortTimelineByYear();
     refreshTimelineSupportState();
