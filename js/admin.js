@@ -304,6 +304,17 @@
     localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(config));
   }
 
+  function setAdminModeAutoPush(enabled) {
+    const config = loadSyncConfig();
+    if (!config) return false;
+
+    const nextEnabled = enabled === true;
+    if (config.autoPush === nextEnabled) return true;
+
+    saveSyncConfig({ ...config, autoPush: nextEnabled });
+    return true;
+  }
+
   function clearSyncConfig() {
     localStorage.removeItem(SYNC_CONFIG_KEY);
     localStorage.removeItem(SYNC_META_KEY);
@@ -2604,8 +2615,14 @@
     adminPanel.querySelector('#admin-undo-remove')?.addEventListener('click', undoLastRemoval);
     adminPanel.querySelector('#admin-undo-all')?.addEventListener('click', undoAllRemovals);
 
-    adminPanel.querySelector('#admin-lock')?.addEventListener('click', () => {
+    adminPanel.querySelector('#admin-lock')?.addEventListener('click', async () => {
       flushPendingSnapshotSave();
+      try {
+        await pushSyncToRemote('admin-lock');
+      } catch {
+        // keep lock flow resilient if sync fails
+      }
+      setAdminModeAutoPush(false);
       setAdminUnlocked(false);
       makeEditable(false);
       document.documentElement.classList.remove('admin-mode');
@@ -2648,6 +2665,7 @@
 
     if (input.trim() === ADMIN_KEY) {
       setAdminUnlocked(true);
+      setAdminModeAutoPush(true);
       createAdminPanel();
       makeEditable(true);
       refreshProjectEditButtons(true);
@@ -2712,12 +2730,14 @@
     enforceLockedEditingState();
 
     if (canUseAdmin && isAdminUnlocked()) {
+      setAdminModeAutoPush(true);
       createAdminPanel();
       makeEditable(true);
       refreshProjectEditButtons(true);
     }
 
     if (!canUseAdmin || !isAdminUnlocked()) {
+      setAdminModeAutoPush(false);
       makeEditable(false);
       refreshProjectEditButtons(false);
     }
