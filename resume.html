@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Neeraj Verma — Resume</title>
+  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Montserrat:wght@700&family=Poppins:wght@600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* Minimal, print-friendly resume overrides */
+    body{background:#fff;color:#111}
+    .resume{max-width:800px;margin:28px auto;padding:28px}
+    .resume h1{font-family:'Montserrat',sans-serif;font-size:28px;margin:0 0 6px}
+    .resume h2{font-family:'Poppins',sans-serif;font-size:16px;margin:6px 0 18px;color:#444}
+    .row{display:flex;gap:24px}
+    .col{flex:1}
+    .section{margin:14px 0}
+    .muted{color:#666}
+    @media (max-width:720px){.row{flex-direction:column}}
+  </style>
+</head>
+<body>
+  <div class="resume">
+    <div class="subpage-nav" style="margin-bottom:16px;">
+      <a href="index.html#home" class="btn neutral sub-nav-btn">Home</a>
+      <button type="button" class="btn neutral sub-nav-btn" onclick="window.history.back();">Previous</button>
+    </div>
+    <header>
+      <h1>Neeraj Verma</h1>
+      <h2 class="muted">Electronics × AI — FPGA, VLSI, Embedded Systems</h2>
+      <p class="muted">Email: er_neerajverma@outlook.com</p>
+    </header>
+
+    <section class="section row">
+      <div class="col">
+        <h3>Education</h3>
+        <p>REC Sonbhadra — BTech ECE</p>
+        <p>IIT Madras — BS Data Science & AI</p>
+      </div>
+      <div class="col">
+        <h3>Leadership & Membership</h3>
+        <p>Technical Head SEIE</p>
+        <p>IEEE Member</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <h3>Selected Projects</h3>
+      <ul>
+        <li><strong>FPGA Learning Board – 2‑bit CPU (2025)</strong> — Verilog, FPGA Toolchain. Designed and prototyped a 2‑bit CPU for learning.</li>
+        <li><strong>CityPulse – Traffic Intelligence System (2025)</strong> — YOLO, ESP32, Python. AI‑powered traffic management with emergency priority.</li>
+        <li><strong>Gram Jyoti – Renewable Energy Monitoring (2025)</strong> — Edge AI, IoT. Remote monitoring with fault prediction.</li>
+        <li><strong>Pragyan Rover (2025)</strong> — Embedded Systems, Robotics. Rover prototype for exploration tasks.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h3>Research & Awards</h3>
+      <ul>
+        <li>2025 — IEEE Paper 1: Undergraduate research in electronics & emerging technologies</li>
+        <li>2025 — Smart India Hackathon Winner</li>
+        <li>2024 — IEEE Paper 2</li>
+        <li>2023 — NCC Hackathon (4th Runner‑Up)</li>
+        <li>NCC Certificate of Excellence</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h3>Skills</h3>
+      <p>Python, MicroPython, C, SQL, TensorFlow, MATLAB, Verilog, FPGA toolchains, PCB Design, ESP32, Arduino, Circuit Theory, Semiconductors, Edge AI, IoT Integration</p>
+    </section>
+
+    <footer class="section muted">Generated for print — use the browser Print dialog (Ctrl+P) to save as PDF.</footer>
+  </div>
+
+  <script>
+    // Auto open print dialog for convenience when opened in a new tab
+    window.addEventListener('load', ()=>{
+      // give the page a small delay so fonts load
+      setTimeout(()=>{
+        try{ window.print(); }catch(e){}
+      },700);
+    });
+  </script>
+</body>
+</html>
