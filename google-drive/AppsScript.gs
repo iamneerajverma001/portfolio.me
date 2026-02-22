@@ -3,10 +3,20 @@ const IMAGE_FOLDER_ID = '1qRmd9xdVIY8zR4hLbe9i92rfmtwkEnHw';
 const VIDEO_FOLDER_ID = '1ObdbM4GdokiWy-05nqdQX4FWAtxCVQKb';
 const AUDIO_FOLDER_ID = '1GjEvlXRADWNe81MOUZ2L99wJdYmMSBp_';
 const OTHER_FOLDER_ID = '1ZCfB3kRSY3zzegvyhe6v9mRPIdSozaX0';
+const SYNC_PAYLOAD_KEY = 'portfolio_sync_payload_v1';
 
 function doPost(e) {
   try {
     const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+
+    const action = String(body.action || '').trim().toLowerCase();
+    if (action === 'syncpush') {
+      return handleSyncPush(body);
+    }
+    if (action === 'syncpull') {
+      return handleSyncPull(body);
+    }
+
     const secret = String(body.secret || '').trim();
     if (String(UPLOAD_SECRET || '').trim() && secret !== String(UPLOAD_SECRET || '').trim()) {
       return jsonResponse({ ok: false, error: 'Unauthorized secret.' }, 401);
@@ -43,6 +53,36 @@ function doPost(e) {
     }, 200);
   } catch (error) {
     return jsonResponse({ ok: false, error: String(error && error.message ? error.message : error) }, 500);
+  }
+}
+
+function handleSyncPush(body) {
+  const secret = String(body.secret || '').trim();
+  if (String(UPLOAD_SECRET || '').trim() && secret !== String(UPLOAD_SECRET || '').trim()) {
+    return jsonResponse({ ok: false, error: 'Unauthorized secret.' }, 401);
+  }
+
+  const payload = body.payload;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return jsonResponse({ ok: false, error: 'Invalid sync payload.' }, 400);
+  }
+
+  const serialized = JSON.stringify(payload);
+  PropertiesService.getScriptProperties().setProperty(SYNC_PAYLOAD_KEY, serialized);
+  return jsonResponse({ ok: true, updatedAt: String(payload.updatedAt || new Date().toISOString()) }, 200);
+}
+
+function handleSyncPull(body) {
+  const serialized = PropertiesService.getScriptProperties().getProperty(SYNC_PAYLOAD_KEY) || '';
+  if (!serialized) {
+    return jsonResponse({ ok: true, payload: null }, 200);
+  }
+
+  try {
+    const parsed = JSON.parse(serialized);
+    return jsonResponse({ ok: true, payload: parsed }, 200);
+  } catch (error) {
+    return jsonResponse({ ok: false, error: 'Stored sync payload is corrupted.' }, 500);
   }
 }
 

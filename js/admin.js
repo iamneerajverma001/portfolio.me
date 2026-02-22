@@ -212,7 +212,8 @@
     const autoPush = parsed.autoPush !== false;
 
     if (provider !== 'github-gist') return getPredefinedSyncConfig();
-    if (!gistId || !token) return getPredefinedSyncConfig();
+    if (!gistId) return getPredefinedSyncConfig();
+    if (!token && !isGoogleDriveUploadConfigured()) return getPredefinedSyncConfig();
 
     return {
       provider,
@@ -234,7 +235,7 @@
 
     const pollSeconds = Math.max(5, parseInt(PREDEFINED_SYNC_POLL_SECONDS, 10) || SYNC_POLL_DEFAULT_SECONDS);
     const autoPull = PREDEFINED_SYNC_AUTO_PULL !== false;
-    const autoPush = PREDEFINED_SYNC_AUTO_PUSH !== false && !!token;
+    const autoPush = PREDEFINED_SYNC_AUTO_PUSH !== false && (!!token || isGoogleDriveUploadConfigured());
 
     return {
       provider: 'github-gist',
@@ -415,6 +416,40 @@
     return lastResponse;
   }
 
+  async function requestSyncRelay(action, config, payload) {
+    const driveConfig = loadDriveUploadConfig();
+    const endpoint = String(driveConfig?.endpoint || '').trim();
+    if (!endpoint) {
+      throw new Error('Sync relay endpoint is not configured.');
+    }
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        action,
+        secret: String(driveConfig?.secret || ''),
+        gistId: String(config?.gistId || ''),
+        fileName: String(config?.fileName || SYNC_FILE_DEFAULT),
+        payload: payload || null
+      }),
+      cache: 'no-store'
+    });
+
+    if (!response.ok) {
+      throw new Error(`Sync relay request failed (${response.status}).`);
+    }
+
+    const result = await response.json();
+    if (!result || result.ok === false) {
+      throw new Error(String(result?.error || 'Sync relay request failed.'));
+    }
+
+    return result;
+  }
+
   async function readGithubErrorMessage(response, fallbackLabel) {
     const fallback = `${fallbackLabel} (${response.status}).`;
     try {
@@ -429,6 +464,10 @@
   }
 
   async function validateSyncConfig(config) {
+    if (!config.token && isGoogleDriveUploadConfigured()) {
+      return true;
+    }
+
     const response = await githubApiRequest(
       `https://api.github.com/gists/${encodeURIComponent(config.gistId)}`,
       { method: 'GET' },
@@ -483,6 +522,15 @@
   }
 
   async function fetchGistSyncPayload(config) {
+    if (!config.token && isGoogleDriveUploadConfigured()) {
+      const relayResult = await requestSyncRelay('syncPull', config, null);
+      const relayPayload = relayResult.payload;
+      if (!relayPayload || typeof relayPayload !== 'object' || Array.isArray(relayPayload)) {
+        throw new Error('Sync payload is invalid JSON.');
+      }
+      return relayPayload;
+    }
+
     const response = await githubApiRequest(
       `https://api.github.com/gists/${encodeURIComponent(config.gistId)}`,
       { method: 'GET' },
@@ -527,6 +575,22 @@
     if (!config) return false;
 
     const payload = buildSyncPayload();
+
+    if (!config.token && isGoogleDriveUploadConfigured()) {
+      await requestSyncRelay('syncPush', config, payload);
+
+      updateSyncMeta((meta) => {
+        meta.lastPushedAt = payload.updatedAt;
+        return meta;
+      });
+
+      if (reason === 'manual' && adminPanel) {
+        window.alert('Cloud sync push completed.');
+      }
+
+      return true;
+    }
+
     const body = {
       files: {
         [config.fileName]: {

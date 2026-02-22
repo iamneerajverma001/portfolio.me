@@ -76,7 +76,7 @@ Admin mode + cross-device sync (new)
 - Recommended for best results:
    - Use a **private gist** for sync data.
    - Enable auto-pull on all viewing devices.
-   - Enable auto-push on devices where you edit in admin mode.
+   - Enable Drive Upload endpoint once so tokenless auto-push can use Apps Script relay.
    - With predefined sync enabled, edits (text, styles, media, tiles, timeline, hero settings) sync across devices automatically.
 - Upload safety limits are enforced to reduce browser storage failures:
    - Image: 2MB
@@ -100,6 +100,7 @@ Google Drive upload during edit (image/video/audio)
    - Save once; this config is synced and can be pulled on other devices
 - Runtime behavior
    - During `Set Image/Video/Audio` file upload, media is uploaded to Drive first, then stored as remote URL in page snapshot.
+   - Cloud sync push/pull can run through Apps Script relay, so no GitHub PAT is required in frontend code.
    - For Google Drive links, playback URL is normalized to Drive `uc?export=download&id=...` format.
    - Videos load via URL and the browser requests data progressively using HTTP range requests when supported.
 
