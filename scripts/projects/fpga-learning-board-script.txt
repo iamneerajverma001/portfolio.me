@@ -1,0 +1,39 @@
+FPGA Learning Board – 2-bit CPU | Script Guide
+
+Objective:
+Build and test a minimal 2-bit CPU on FPGA for learning architecture basics.
+
+1) Project modules
+- Program Counter (PC)
+- ROM Instruction Memory
+- Instruction Decoder
+- ALU (2-bit operations)
+- Register File
+- Top-level integration
+
+2) Suggested build order
+- Write and test each module separately
+- Create unified testbench with clock/reset
+- Validate instruction cycle (fetch -> decode -> execute -> write-back)
+- Synthesize and program FPGA board
+
+3) Example pseudo testbench
+module cpu_tb;
+  reg clk = 0;
+  reg rst = 1;
+  wire [1:0] out;
+
+  cpu_top dut(.clk(clk), .rst(rst), .out(out));
+
+  always #5 clk = ~clk;
+
+  initial begin
+    #20 rst = 0;
+    #300 $finish;
+  end
+endmodule
+
+4) Reuse notes
+- Keep opcode map in one header file
+- Keep ALU op definitions centralized
+- Reuse testbench clock/reset scaffold for larger CPU projects

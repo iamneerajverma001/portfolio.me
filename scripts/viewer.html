@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Script Viewer" />
+  <meta property="og:url" content="https://iamneerajverma001.github.io/portfolio.me/scripts/viewer.html" />
+  <title>Script Viewer</title>
+  <link rel="canonical" href="https://iamneerajverma001.github.io/portfolio.me/scripts/viewer.html" />
+  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Montserrat:wght@700&family=Poppins:wght@600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <main class="project-page container">
+    <div class="project-shell">
+      <div class="project-top">
+        <div>
+          <h1 id="scriptTitle">Project Script Viewer</h1>
+          <p class="project-sub">Reusable script reference</p>
+        </div>
+        <div class="subpage-nav">
+          <a href="../index.html#home" class="btn neutral sub-nav-btn">Home</a>
+          <button type="button" class="btn neutral sub-nav-btn" onclick="if(window.history.length>1){window.history.back();}else if(document.referrer){window.location.href=document.referrer;}">Previous</button>
+        </div>
+      </div>
+
+      <section class="project-block">
+        <h2>Script Content</h2>
+        <div class="script-box">
+          <pre id="scriptContent">Loading script...</pre>
+        </div>
+        <div class="script-actions">
+          <button type="button" id="copyViewerScript" class="script-copy-btn">Copy Script</button>
+          <a id="openRawScript" class="script-link" target="_blank" rel="noopener">Open Raw Text</a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="../js/theme.js"></script>
+  <script src="../js/script-viewer.js"></script>
+  <script src="../js/admin.js"></script>
+</body>
+</html>

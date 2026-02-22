@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://iamneerajverma001.github.io/portfolio.me/sitemap.xml

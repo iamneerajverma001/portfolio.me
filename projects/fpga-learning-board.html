@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="FPGA Learning Board — 2-bit CPU project by Neeraj Verma, covering Verilog architecture, simulation, and FPGA deployment workflow." />
+  <meta name="robots" content="index,follow" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="FPGA Learning Board – 2-bit CPU" />
+  <meta property="og:description" content="Compact 2-bit CPU project with Verilog modules, instruction flow, and practical FPGA execution." />
+  <meta property="og:url" content="https://iamneerajverma001.github.io/portfolio.me/projects/fpga-learning-board.html" />
+  <meta property="og:image" content="https://iamneerajverma001.github.io/portfolio.me/images/projects/fpga-learning-board.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <title>FPGA Learning Board – 2-bit CPU</title>
+  <link rel="canonical" href="https://iamneerajverma001.github.io/portfolio.me/projects/fpga-learning-board.html" />
+  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Montserrat:wght@700&family=Poppins:wght@600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <main class="project-page container">
+    <div class="project-shell">
+      <div class="project-top">
+        <div>
+          <h1>FPGA Learning Board – 2-bit CPU</h1>
+          <p class="project-sub">Verilog, FPGA Toolchain • 2025</p>
+        </div>
+        <div class="subpage-nav">
+          <a href="../index.html#home" class="btn neutral sub-nav-btn">Home</a>
+          <button type="button" class="btn neutral sub-nav-btn" onclick="window.history.back();">Previous</button>
+        </div>
+      </div>
+
+      <div class="project-sections">
+        <section class="project-block">
+          <h2>Project Explanation</h2>
+          <p>This project demonstrates a compact 2-bit CPU architecture for processor fundamentals. The design includes instruction decoding, ALU operations, register updates, and clock-driven execution on FPGA hardware. It is built to make digital logic and CPU pipeline basics easier to understand in practical lab sessions.</p>
+        </section>
+
+        <section class="project-block">
+          <h2>Project Requirements</h2>
+          <ul class="outcome-list">
+            <li><strong>Hardware:</strong> FPGA development board, USB programmer, stable power supply.</li>
+            <li><strong>Software:</strong> Verilog HDL toolchain (Vivado/Quartus), simulator, waveform viewer.</li>
+            <li><strong>Inputs:</strong> Instruction ROM design, clock/reset setup, module-level testbench files.</li>
+          </ul>
+        </section>
+
+        <section class="project-block">
+          <h2>Project Outcome</h2>
+          <ul class="outcome-list">
+            <li><strong>Technical:</strong> Built and validated a working 2-bit CPU flow on FPGA with modular Verilog blocks.</li>
+            <li><strong>Impact:</strong> Created a practical prototype for explaining processor fundamentals in lab sessions.</li>
+            <li><strong>Future Scope:</strong> Can be extended to wider instruction sets and deeper pipeline experiments.</li>
+          </ul>
+        </section>
+
+        <section class="project-block">
+          <h2>Project Script</h2>
+          <p>This script flow helps you rebuild the logic quickly and test each module in sequence.</p>
+          <div class="script-box">
+            <pre>module cpu_top(input clk, input rst, output [1:0] out);
+  // 1) program counter update
+  // 2) instruction fetch from ROM
+  // 3) decode + ALU operation
+  // 4) write-back to registers
+endmodule
+
+// Suggested workflow:
+// - simulate each module first
+// - integrate and run testbench
+// - map pins and program FPGA board</pre>
+          </div>
+          <div class="script-actions">
+            <button type="button" class="script-copy-btn copy-script-btn">Copy Script</button>
+            <a class="script-link" href="../scripts/viewer.html?file=projects/fpga-learning-board-script.txt" target="_blank" rel="noopener">Open full script guide</a>
+          </div>
+        </section>
+
+        <section class="project-block">
+          <h2>Project Image</h2>
+          <div class="media-placeholder">FPGA board / CPU block diagram image preview</div>
+          <p class="media-note">Add image file at: <strong>images/projects/fpga-learning-board.jpg</strong></p>
+        </section>
+
+        <section class="project-block">
+          <h2>Project Video</h2>
+          <div class="media-placeholder">FPGA CPU demonstration video preview</div>
+          <p class="media-note">Add video file at: <strong>videos/projects/fpga-learning-board.mp4</strong></p>
+        </section>
+      </div>
+    </div>
+  </main>
+  <script src="../js/theme.js"></script>
+  <script src="../js/project.js"></script>
+  <script src="../js/admin.js"></script>
+</body>
+</html>

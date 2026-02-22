@@ -1,0 +1,10 @@
+{
+  "name": "Neeraj Verma Portfolio",
+  "short_name": "Neeraj Portfolio",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0A192F",
+  "theme_color": "#0A192F",
+  "description": "Portfolio of Neeraj Verma — Electronics, FPGA, Embedded Systems, and AI projects."
+}

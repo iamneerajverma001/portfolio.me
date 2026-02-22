@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="CityPulse Traffic Intelligence System by Neeraj Verma using YOLO, ESP32, and Python for adaptive traffic control." />
+  <meta name="robots" content="index,follow" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="CityPulse – Traffic Intelligence System" />
+  <meta property="og:description" content="AI-powered traffic management with emergency priority and low-cost edge integration." />
+  <meta property="og:url" content="https://iamneerajverma001.github.io/portfolio.me/projects/citypulse-traffic-intelligence.html" />
+  <meta property="og:image" content="https://iamneerajverma001.github.io/portfolio.me/images/projects/citypulse-traffic-intelligence.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <title>CityPulse – Traffic Intelligence System</title>
+  <link rel="canonical" href="https://iamneerajverma001.github.io/portfolio.me/projects/citypulse-traffic-intelligence.html" />
+  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Montserrat:wght@700&family=Poppins:wght@600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <main class="project-page container">
+    <div class="project-shell">
+      <div class="project-top">
+        <div>
+          <h1>CityPulse – Traffic Intelligence System</h1>
+          <p class="project-sub">YOLO, ESP32, Python • 2025</p>
+        </div>
+        <div class="subpage-nav">
+          <a href="../index.html#home" class="btn neutral sub-nav-btn">Home</a>
+          <button type="button" class="btn neutral sub-nav-btn" onclick="window.history.back();">Previous</button>
+        </div>
+      </div>
+
+      <div class="project-sections">
+        <section class="project-block">
+          <h2>Project Explanation</h2>
+          <p>CityPulse uses computer vision for real-time vehicle detection and adaptive traffic signal control. It prioritizes emergency vehicles and updates traffic timing dynamically to reduce congestion. ESP32 integration enables low-cost signal control and edge-triggered automation for smart-city deployment.</p>
+        </section>
+
+        <section class="project-block">
+          <h2>Project Requirements</h2>
+          <ul class="outcome-list">
+            <li><strong>Hardware:</strong> Camera feed source, ESP32 board, relay/signal control interface.</li>
+            <li><strong>Software:</strong> Python, OpenCV, YOLO model weights, serial communication library.</li>
+            <li><strong>Inputs:</strong> Labeled traffic classes, emergency-priority rule logic, lane mapping setup.</li>
+          </ul>
+        </section>
+
+        <section class="project-block">
+          <h2>Project Outcome</h2>
+          <ul class="outcome-list">
+            <li><strong>Technical:</strong> Implemented AI-based vehicle detection with embedded signal control integration.</li>
+            <li><strong>Impact:</strong> Demonstrated dynamic traffic optimization and emergency-priority response.</li>
+            <li><strong>Future Scope:</strong> Ready for expansion with live camera feeds and multi-junction coordination.</li>
+          </ul>
+        </section>
+
+        <section class="project-block">
+          <h2>Project Script</h2>
+          <p>This script is organized so users can run detection first, then trigger smart signal logic.</p>
+          <div class="script-box">
+            <pre>import cv2
+from ultralytics import YOLO
+
+model = YOLO("yolov8n.pt")
+cap = cv2.VideoCapture("traffic.mp4")
+
+while cap.isOpened():
+    ok, frame = cap.read()
+    if not ok:
+        break
+    results = model(frame)
+    # count vehicles + emergency class
+    # update ESP32 signal timing</pre>
+          </div>
+          <div class="script-actions">
+            <button type="button" class="script-copy-btn copy-script-btn">Copy Script</button>
+            <a class="script-link" href="../scripts/viewer.html?file=projects/citypulse-traffic-intelligence-script.txt" target="_blank" rel="noopener">Open full script guide</a>
+          </div>
+        </section>
+
+        <section class="project-block">
+          <h2>Project Image</h2>
+          <div class="media-placeholder">Traffic dashboard / detection output image preview</div>
+          <p class="media-note">Add image file at: <strong>images/projects/citypulse-traffic-intelligence.jpg</strong></p>
+        </section>
+
+        <section class="project-block">
+          <h2>Project Video</h2>
+          <div class="media-placeholder">Traffic detection and signal response video preview</div>
+          <p class="media-note">Add video file at: <strong>videos/projects/citypulse-traffic-intelligence.mp4</strong></p>
+        </section>
+      </div>
+    </div>
+  </main>
+  <script src="../js/theme.js"></script>
+  <script src="../js/project.js"></script>
+  <script src="../js/admin.js"></script>
+</body>
+</html>

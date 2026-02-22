@@ -1,0 +1,38 @@
+Pragyan Rover | Script Guide
+
+Objective:
+Control rover movement with sensor-based obstacle handling.
+
+1) Functional blocks
+- Motor control (forward, reverse, left, right)
+- Distance sensing (ultrasonic/IR)
+- Basic navigation decisions
+- Telemetry output
+
+2) Starter flow
+def move_forward(speed):
+    # set motor PWM
+    pass
+
+def turn_left(speed):
+    # differential motor control
+    pass
+
+def avoid_obstacle(distance):
+    if distance < 20:
+        # stop -> turn -> move
+        pass
+
+while True:
+    # read sensors
+    distance = 100  # replace with actual sensor reading
+
+    if distance < 20:
+        avoid_obstacle(distance)
+    else:
+        move_forward(70)
+
+3) Reuse notes
+- Keep movement primitives as reusable functions
+- Keep sensor reading logic isolated from navigation decisions
+- Reuse rover control loop for autonomous variants
