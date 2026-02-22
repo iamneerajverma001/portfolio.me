@@ -444,44 +444,90 @@
   }
 
   async function requestSyncRelay(action, config, payload) {
-    const driveConfig = loadDriveUploadConfig();
-    const endpoint = String(driveConfig?.endpoint || '').trim();
-    if (!endpoint) {
-      throw new Error('Sync relay endpoint is not configured.');
-    }
+    const relayBody = {
+      action,
+      syncStoreId: String(config?.syncStoreId || config?.gistId || ''),
+      fileName: String(config?.fileName || SYNC_FILE_DEFAULT),
+      payload: payload || null
+    };
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8'
-      },
-      body: JSON.stringify({
-        action,
-        secret: String(driveConfig?.secret || ''),
-        syncStoreId: String(config?.syncStoreId || config?.gistId || ''),
-        fileName: String(config?.fileName || SYNC_FILE_DEFAULT),
-        payload: payload || null
-      }),
-      cache: 'no-store'
-    });
+    const sendRelayRequest = async (candidate) => {
+      const endpoint = String(candidate?.endpoint || '').trim();
+      if (!endpoint) {
+        throw new Error('Sync relay endpoint is not configured.');
+      }
 
-    if (!response.ok) {
-      throw new Error(`Sync relay request failed (${response.status}).`);
-    }
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
+        body: JSON.stringify({
+          ...relayBody,
+          secret: String(candidate?.secret || '')
+        }),
+        cache: 'no-store'
+      });
 
-    const result = await response.json();
-    if (!result || result.ok === false) {
-      const message = String(result?.error || 'Sync relay request failed.');
+      const rawText = await response.text();
+      const parsed = safeParse(rawText || '');
+
+      if (!response.ok) {
+        const message = String(parsed?.error || parsed?.message || `Sync relay request failed (${response.status}).`);
+        throw new Error(message);
+      }
+
+      if (!parsed || parsed.ok === false) {
+        const message = String(parsed?.error || 'Sync relay request failed.');
+        throw new Error(message);
+      }
+
+      return parsed;
+    };
+
+    const driveConfig = loadDriveUploadConfig() || { endpoint: '', secret: '' };
+    const fallbackConfig = {
+      endpoint: String(GOOGLE_DRIVE_UPLOAD_URL || '').trim(),
+      secret: String(GOOGLE_DRIVE_UPLOAD_SECRET || '').trim()
+    };
+
+    try {
+      return await sendRelayRequest(driveConfig);
+    } catch (initialError) {
+      const message = String(initialError?.message || '');
+      const canRetryWithFallback = /missing file payload|unauthorized secret|sync relay request failed/i.test(message)
+        && !!fallbackConfig.endpoint
+        && (fallbackConfig.endpoint !== String(driveConfig.endpoint || '').trim()
+          || fallbackConfig.secret !== String(driveConfig.secret || '').trim());
+
+      if (canRetryWithFallback) {
+        localStorage.setItem(
+          DRIVE_UPLOAD_CONFIG_KEY,
+          JSON.stringify({
+            endpoint: fallbackConfig.endpoint,
+            secret: fallbackConfig.secret
+          })
+        );
+
+        try {
+          return await sendRelayRequest(fallbackConfig);
+        } catch (fallbackError) {
+          const fallbackMessage = String(fallbackError?.message || message || 'Sync relay request failed.');
+          if (!syncRelayIssueNotified && /missing file payload|unauthorized secret/i.test(fallbackMessage)) {
+            syncRelayIssueNotified = true;
+            window.alert('Drive Cloud Sync relay is using an old Apps Script deployment or wrong secret. Redeploy the latest Apps Script version and verify Drive Upload secret.');
+          }
+          throw new Error(fallbackMessage);
+        }
+      }
 
       if (!syncRelayIssueNotified && /missing file payload|unauthorized secret/i.test(message)) {
         syncRelayIssueNotified = true;
         window.alert('Drive Cloud Sync relay is using an old Apps Script deployment or wrong secret. Redeploy the latest Apps Script version and verify Drive Upload secret.');
       }
 
-      throw new Error(message);
+      throw initialError;
     }
-
-    return result;
   }
 
   async function readGithubErrorMessage(response, fallbackLabel) {
