@@ -62,19 +62,19 @@ Admin mode storage note
 - If media is uploaded using Admin tools, it is stored in browser `localStorage` snapshots (Data URL), not as physical files.
 - Auto-loader does not override already inserted admin media.
 
-Admin mode + cross-device sync (new)
+Admin mode + Drive Cloud Sync
 - Admin unlock is available on `file:`, `http:`, and `https:` pages.
-- Admin changes still save locally first, but you can now sync them across devices using GitHub Gist cloud sync.
-- Cloud sync is now predefined and starts automatically on page load (default auto-pull: 5s).
+- Admin changes still save locally first, then sync across devices through Drive Cloud Sync.
+- Drive Cloud Sync is predefined and starts automatically on page load (default auto-pull: 5s).
 - In Admin panel:
    - `Drive Upload` → set Google Drive upload endpoint/secret once (stored in synced portfolio data)
-   - `Push Now` → publish current site state to cloud
-   - `Pull Now` → update this device from cloud
-   - `Reset Sync` → restore predefined sync defaults on this device
+   - `Sync Push` → publish current site state to cloud
+   - `Sync Pull` → update this device from cloud
+   - `Reset Drive Sync` → restore predefined sync defaults on this device
    - Inline text edits in Admin mode auto-save automatically and get included in auto-push (no manual Save required)
    - `Set Image/Video/Audio` supports hosted URL or direct upload to Google Drive (when configured)
 - Recommended for best results:
-   - Use a **private gist** for sync data.
+   - Keep your Apps Script `UPLOAD_SECRET` private.
    - Enable auto-pull on all viewing devices.
    - Enable Drive Upload endpoint once so tokenless auto-push can use Apps Script relay.
    - With predefined sync enabled, edits (text, styles, media, tiles, timeline, hero settings) sync across devices automatically.

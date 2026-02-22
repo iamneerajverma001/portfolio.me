@@ -585,7 +585,7 @@
       });
 
       if (reason === 'manual' && adminPanel) {
-        window.alert('Cloud sync push completed.');
+        window.alert('Drive Cloud Sync push completed.');
       }
 
       return true;
@@ -616,7 +616,7 @@
 
       if (response.status === 401 && reason === 'manual') {
         const tokenInput = window.prompt(
-          'GitHub rejected token (401). Paste a fresh PAT with gist scope:',
+          'GitHub rejected token (401). Paste a fresh PAT with gist scope (optional fallback mode):',
           ''
         );
 
@@ -646,7 +646,7 @@
               });
 
               if (adminPanel) {
-                window.alert('Cloud sync push completed. Token was refreshed.');
+                window.alert('Drive Cloud Sync push completed. Token was refreshed.');
               }
               return true;
             }
@@ -665,7 +665,7 @@
     });
 
     if (reason === 'manual' && adminPanel) {
-      window.alert('Cloud sync push completed.');
+      window.alert('Drive Cloud Sync push completed.');
     }
 
     return true;
@@ -677,7 +677,7 @@
     const forceReload = settings.forceReload === true;
     const config = loadPullConfig({ preferConfigured: manual });
     if (!config) {
-      if (manual) window.alert('Cloud sync is not configured.');
+      if (manual) window.alert('Drive Cloud Sync is not configured.');
       return false;
     }
 
@@ -706,7 +706,7 @@
       const lastAppliedAt = loadSyncMeta().lastAppliedAt;
 
       if (!updatedAt) {
-        if (manual) window.alert('Cloud sync payload is missing updated timestamp.');
+        if (manual) window.alert('Drive Cloud Sync payload is missing updated timestamp.');
         return false;
       }
 
@@ -716,7 +716,7 @@
 
       const applied = applyPortfolioDataObject(payload.data || {});
       if (!applied) {
-        if (manual) window.alert('No portfolio data found in cloud sync payload.');
+        if (manual) window.alert('No portfolio data found in Drive Cloud Sync payload.');
         return false;
       }
 
@@ -732,12 +732,12 @@
         }, 80);
       }
       if (manual) {
-        window.alert('Cloud sync pull completed. This device is now up to date.');
+        window.alert('Drive Cloud Sync pull completed. This device is now up to date.');
       }
       return true;
     } catch (error) {
       if (manual) {
-        window.alert(String(error?.message || 'Cloud sync pull failed.'));
+        window.alert(String(error?.message || 'Drive Cloud Sync pull failed.'));
       }
       return false;
     } finally {
@@ -782,7 +782,7 @@
   async function setupCloudSync() {
     const nextConfig = applyPredefinedSyncConfig({ force: true });
     if (!nextConfig) {
-      window.alert('Predefined cloud sync is not available.');
+      window.alert('Predefined Drive Cloud Sync is not available.');
       return;
     }
 
@@ -792,13 +792,13 @@
       try {
         await pushSyncToRemote('manual');
       } catch (error) {
-        window.alert(String(error?.message || 'Cloud sync push failed.'));
+        window.alert(String(error?.message || 'Drive Cloud Sync push failed.'));
         return;
       }
     }
 
     pullSyncFromRemote({ manual: false });
-    window.alert('Cloud sync is running with predefined defaults on this device.');
+    window.alert('Drive Cloud Sync is running with predefined defaults on this device.');
   }
 
   function bindSyncRefreshTriggers() {
@@ -2528,9 +2528,9 @@
         <button type="button" id="admin-export-backup">Export Backup</button>
         <button type="button" id="admin-import-backup">Import Backup</button>
         <button type="button" id="admin-drive-setup">Drive Upload</button>
-        <button type="button" id="admin-push-sync">Push Now</button>
-        <button type="button" id="admin-pull-sync">Pull Now</button>
-        <button type="button" id="admin-clear-sync">Reset Sync</button>
+        <button type="button" id="admin-push-sync">Sync Push</button>
+        <button type="button" id="admin-pull-sync">Sync Pull</button>
+        <button type="button" id="admin-clear-sync">Reset Drive Sync</button>
       </div>
       <div class="admin-index-actions" id="admin-index-actions">
         <button type="button" id="admin-add-project">Add Project Tile</button>
@@ -2604,20 +2604,20 @@
       try {
         await pushSyncToRemote('manual');
       } catch (error) {
-        window.alert(String(error?.message || 'Cloud sync push failed.'));
+        window.alert(String(error?.message || 'Drive Cloud Sync push failed.'));
       }
     });
     adminPanel.querySelector('#admin-pull-sync')?.addEventListener('click', () => {
       pullSyncFromRemote({ manual: true });
     });
     adminPanel.querySelector('#admin-clear-sync')?.addEventListener('click', () => {
-      const confirmed = window.confirm('Reset cloud sync to predefined defaults on this device?');
+      const confirmed = window.confirm('Reset Drive Cloud Sync to predefined defaults on this device?');
       if (!confirmed) return;
       clearSyncConfig();
       applyPredefinedSyncConfig({ force: true });
       startSyncPolling();
       pullSyncFromRemote({ manual: false });
-      window.alert('Cloud sync reset to predefined defaults on this device.');
+      window.alert('Drive Cloud Sync reset to predefined defaults on this device.');
     });
 
     adminPanel.querySelector('#admin-undo-remove')?.addEventListener('click', undoLastRemoval);
