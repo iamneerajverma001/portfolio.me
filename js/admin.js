@@ -616,6 +616,7 @@
     Object.entries(dataObj).forEach(([key, value]) => {
       if (!key.startsWith('portfolio_')) return;
       if (key === SYNC_CONFIG_KEY || key === SYNC_META_KEY) return;
+      if (key === UNLOCK_KEY) return;
       if (typeof value !== 'string') return;
       localStorage.setItem(key, value);
       appliedAny = true;
@@ -906,6 +907,12 @@
     const protocol = String(window.location.protocol || '').toLowerCase();
     if (protocol === 'file:' || protocol === 'http:' || protocol === 'https:') return true;
     return false;
+  }
+
+  function isPhoneLikeViewport() {
+    const narrow = window.matchMedia && window.matchMedia('(max-width: 820px)').matches;
+    const touchLike = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    return !!(narrow || touchLike);
   }
 
   function inferUploadKind(accept) {
@@ -1416,6 +1423,7 @@
       const key = localStorage.key(index);
       if (!key || !key.startsWith('portfolio_')) continue;
       if (key === SYNC_CONFIG_KEY || key === SYNC_META_KEY) continue;
+      if (key === UNLOCK_KEY) continue;
 
       const value = localStorage.getItem(key);
       if (typeof value === 'string') {
@@ -1485,7 +1493,7 @@
   function normalizeBackupData(parsed) {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
     const source = parsed.data && typeof parsed.data === 'object' ? parsed.data : parsed;
-    return Object.entries(source).filter(([key, value]) => key.startsWith('portfolio_') && typeof value === 'string');
+    return Object.entries(source).filter(([key, value]) => key.startsWith('portfolio_') && key !== UNLOCK_KEY && typeof value === 'string');
   }
 
   function importAdminBackup() {
@@ -2896,6 +2904,11 @@
 
   function initAdminRuntime() {
     const canUseAdmin = isAdminHostAllowed();
+
+    if (isPhoneLikeViewport() && isAdminUnlocked()) {
+      setAdminUnlocked(false);
+      setAdminModeAutoPush(false);
+    }
 
     performBackgroundCleanupOnce();
     scrubStoredSyncTokenIfDriveRelayEnabled();
