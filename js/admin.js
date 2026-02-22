@@ -910,9 +910,15 @@
   }
 
   function isPhoneLikeViewport() {
-    const narrow = window.matchMedia && window.matchMedia('(max-width: 820px)').matches;
-    const touchLike = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
-    return !!(narrow || touchLike);
+    const hasMatchMedia = typeof window.matchMedia === 'function';
+    const narrow = hasMatchMedia ? window.matchMedia('(max-width: 1024px)').matches : window.innerWidth <= 1024;
+    const touchLike = hasMatchMedia
+      ? window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(hover: none)').matches
+      : false;
+    const maxTouchPoints = Number(navigator.maxTouchPoints || 0);
+    const userAgent = String(navigator.userAgent || '').toLowerCase();
+    const mobileUa = /android|iphone|ipad|ipod|windows phone|opera mini|mobile/i.test(userAgent);
+    return !!(narrow || touchLike || maxTouchPoints > 1 || mobileUa);
   }
 
   function inferUploadKind(accept) {
@@ -2904,8 +2910,9 @@
 
   function initAdminRuntime() {
     const canUseAdmin = isAdminHostAllowed();
+    const blockAutoOpenOnPhone = isPhoneLikeViewport();
 
-    if (isPhoneLikeViewport() && isAdminUnlocked()) {
+    if (blockAutoOpenOnPhone) {
       setAdminUnlocked(false);
       setAdminModeAutoPush(false);
     }
@@ -2929,7 +2936,7 @@
 
     enforceLockedEditingState();
 
-    if (canUseAdmin && isAdminUnlocked()) {
+    if (canUseAdmin && isAdminUnlocked() && !blockAutoOpenOnPhone) {
       setAdminModeAutoPush(true);
       createAdminPanel();
       makeEditable(true);
