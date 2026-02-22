@@ -26,6 +26,8 @@
   const PUBLIC_AUTO_PULL_ENABLED = true;
   const SYNC_POLL_DEFAULT_SECONDS = 5;
   const SYNC_PUSH_DEBOUNCE_MS = 1200;
+  const SYNC_MAX_TOTAL_BYTES = 420 * 1024;
+  const SYNC_MAX_VALUE_BYTES = 180 * 1024;
   const SNAPSHOT_SAVE_DEBOUNCE_MS = 700;
   const CLICK_WINDOW_MS = 2200;
   const MONTHS_SHORT = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
@@ -1370,17 +1372,49 @@
     scheduleSyncPush('remove-history');
   }
 
+  function estimateUtf8Bytes(value) {
+    const text = String(value || '');
+    if (typeof TextEncoder !== 'undefined') {
+      return new TextEncoder().encode(text).length;
+    }
+    return unescape(encodeURIComponent(text)).length;
+  }
+
+  function sanitizeSnapshotForSync(value) {
+    const raw = String(value || '');
+    if (!raw) return '';
+
+    let next = raw;
+    next = next.replace(/(src|poster)=(["'])data:[^"']*\2/gi, '$1=$2$2');
+    next = next.replace(/data-support-image=(["'])data:[^"']*\1/gi, 'data-support-image=$1$1');
+    next = next.replace(/url\((['"]?)data:[^)]+\1\)/gi, 'url()');
+    return next;
+  }
+
   function collectPortfolioStorageData() {
     const data = {};
+    let totalBytes = 0;
+
     for (let index = 0; index < localStorage.length; index += 1) {
       const key = localStorage.key(index);
       if (!key || !key.startsWith('portfolio_')) continue;
       if (key === SYNC_CONFIG_KEY || key === SYNC_META_KEY) continue;
+
       const value = localStorage.getItem(key);
       if (typeof value === 'string') {
-        data[key] = value;
+        const normalizedValue = key.startsWith(PAGE_SNAPSHOT_PREFIX)
+          ? sanitizeSnapshotForSync(value)
+          : value;
+
+        const entryBytes = estimateUtf8Bytes(normalizedValue);
+        if (entryBytes > SYNC_MAX_VALUE_BYTES) continue;
+        if (totalBytes + entryBytes > SYNC_MAX_TOTAL_BYTES) continue;
+
+        data[key] = normalizedValue;
+        totalBytes += entryBytes;
       }
     }
+
     return data;
   }
 
