@@ -10,7 +10,7 @@
   const SYNC_CONFIG_KEY = 'portfolio_sync_config_v1';
   const SYNC_META_KEY = 'portfolio_sync_meta_v1';
   const SYNC_FILE_DEFAULT = 'portfolio-sync.json';
-  const PUBLIC_AUTO_PULL_GIST_ID = '022f30fe31719e1e69fdd0a9fb2a0215';
+  const PUBLIC_AUTO_PULL_GIST_ID = '3f406008428e8a41a9437d6432756915';
   const PUBLIC_AUTO_PULL_ENABLED = true;
   const SYNC_POLL_DEFAULT_SECONDS = 8;
   const SYNC_PUSH_DEBOUNCE_MS = 1200;
@@ -150,10 +150,7 @@
     };
   }
 
-  function loadPullConfig() {
-    const configured = loadSyncConfig();
-    if (configured) return configured;
-
+  function getPublicPullConfig() {
     if (!PUBLIC_AUTO_PULL_ENABLED || !PUBLIC_AUTO_PULL_GIST_ID) {
       return null;
     }
@@ -167,6 +164,22 @@
       autoPull: true,
       autoPush: false
     };
+  }
+
+  function loadPullConfig(options) {
+    const settings = options || {};
+    const preferConfigured = settings.preferConfigured === true;
+    const configured = loadSyncConfig();
+
+    if (configured && (preferConfigured || configured.autoPull !== false)) {
+      return configured;
+    }
+
+    const publicConfig = getPublicPullConfig();
+    if (publicConfig) return publicConfig;
+
+    if (configured) return configured;
+    return null;
   }
 
   function saveSyncConfig(config) {
@@ -484,7 +497,7 @@
     const settings = options || {};
     const manual = settings.manual === true;
     const forceReload = settings.forceReload === true;
-    const config = loadPullConfig();
+    const config = loadPullConfig({ preferConfigured: manual });
     if (!config) {
       if (manual) window.alert('Cloud sync is not configured.');
       return false;
@@ -494,7 +507,23 @@
 
     syncPullInFlight = true;
     try {
-      const payload = await fetchGistSyncPayload(config);
+      let effectiveConfig = config;
+      let payload;
+
+      try {
+        payload = await fetchGistSyncPayload(effectiveConfig);
+      } catch (primaryError) {
+        const publicConfig = getPublicPullConfig();
+        const canFallback = !manual && publicConfig && effectiveConfig.gistId !== publicConfig.gistId;
+
+        if (!canFallback) {
+          throw primaryError;
+        }
+
+        payload = await fetchGistSyncPayload(publicConfig);
+        effectiveConfig = publicConfig;
+      }
+
       const updatedAt = String(payload.updatedAt || '');
       const lastAppliedAt = loadSyncMeta().lastAppliedAt;
 
