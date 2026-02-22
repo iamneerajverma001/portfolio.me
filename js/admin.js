@@ -10,6 +10,8 @@
   const BACKGROUND_CLEANUP_KEY = 'portfolio_background_cleanup_v2';
   const SYNC_CONFIG_KEY = 'portfolio_sync_config_v1';
   const SYNC_META_KEY = 'portfolio_sync_meta_v1';
+  const SYNC_PROVIDER = 'drive-sync';
+  const SYNC_PROVIDER_LEGACY = 'github-gist';
   const SYNC_FILE_DEFAULT = 'portfolio-sync.json';
   const PREDEFINED_SYNC_ENABLED = true;
   const PREDEFINED_SYNC_STORE_ID = '022f30fe31719e1e69fdd0a9fb2a0215';
@@ -211,7 +213,7 @@
     const autoPull = parsed.autoPull !== false;
     const autoPush = parsed.autoPush !== false;
 
-    if (provider !== 'github-gist') return getPredefinedSyncConfig();
+    if (provider !== SYNC_PROVIDER && provider !== SYNC_PROVIDER_LEGACY) return getPredefinedSyncConfig();
     if (!syncStoreId) return getPredefinedSyncConfig();
     if (!token && !isGoogleDriveUploadConfigured()) return getPredefinedSyncConfig();
 
@@ -238,7 +240,7 @@
     const autoPush = PREDEFINED_SYNC_AUTO_PUSH !== false && (!!token || isGoogleDriveUploadConfigured());
 
     return {
-      provider: 'github-gist',
+      provider: SYNC_PROVIDER,
       syncStoreId,
       token,
       fileName: String(PREDEFINED_SYNC_FILE || SYNC_FILE_DEFAULT).trim() || SYNC_FILE_DEFAULT,
@@ -271,7 +273,7 @@
     }
 
     return {
-      provider: 'github-gist',
+      provider: SYNC_PROVIDER,
       syncStoreId: PUBLIC_AUTO_PULL_STORE_ID,
       token: '',
       fileName: SYNC_FILE_DEFAULT,
