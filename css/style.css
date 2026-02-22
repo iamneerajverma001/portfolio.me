@@ -207,6 +207,10 @@ body[data-hero-design="aurora"] .hero::before{background:conic-gradient(from 120
 .footer-btn{margin-left:0;padding:10px 16px;font-size:.92rem}
 .site-footer .btn.neutral{background:rgba(255,255,255,0.14);color:#ffffff;border:1px solid rgba(255,255,255,0.38)}
 .site-footer .btn.neutral:hover{background:rgba(255,255,255,0.22)}
+.site-footer .btn.neutral,
+.site-footer .footer-btn,
+.site-footer .contact-line,
+.site-footer .contact-line a{color:#ffffff !important}
 .social{display:flex;align-items:center;gap:10px}
 .social-link{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,0.18);opacity:0.95}
 .social-icon-img{width:22px;height:22px;object-fit:cover;border-radius:5px;display:block}
@@ -274,6 +278,9 @@ body[data-hero-design="aurora"] .hero::before{background:conic-gradient(from 120
   .contact-actions,.social{justify-content:center}
   .contact-actions{width:100%}
   .footer-btn{width:100%;max-width:280px;text-align:center}
+  .site-footer .btn.neutral{background:rgba(255,255,255,0.2) !important;border-color:rgba(255,255,255,0.45) !important}
+  .site-footer .footer-inner > *,
+  .site-footer .motion-reveal{opacity:1 !important;transform:none !important}
   .footer-cta{justify-self:center}
   .container{padding:0 16px}
   .about-grid{grid-template-columns:1fr}
