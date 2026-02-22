@@ -177,6 +177,44 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
 
+  function ensureFooterContactVisibility(){
+    const footer = document.querySelector('.site-footer');
+    if(!footer) return;
+
+    const unhideSelectors = ['.contact-info', '.footer-cta', '.contact-actions', '.social'];
+    unhideSelectors.forEach((selector)=>{
+      footer.querySelectorAll(selector).forEach((node)=>{
+        node.classList.remove('admin-section-hidden');
+        if(!node.style) return;
+        if(node.style.display === 'none') node.style.removeProperty('display');
+        if(node.style.visibility === 'hidden') node.style.removeProperty('visibility');
+        if(node.style.opacity === '0') node.style.removeProperty('opacity');
+      });
+    });
+
+    const actions = footer.querySelector('.contact-actions');
+    if(actions){
+      const hasMail = !!actions.querySelector('a[href^="mailto:"]');
+      const hasTel = !!actions.querySelector('a[href^="tel:"]');
+
+      if(!hasMail){
+        const mail = document.createElement('a');
+        mail.href = 'mailto:er_neerajverma@outlook.com';
+        mail.className = 'btn neutral footer-btn';
+        mail.textContent = 'Email Me';
+        actions.appendChild(mail);
+      }
+
+      if(!hasTel){
+        const phone = document.createElement('a');
+        phone.href = 'tel:+919324140772';
+        phone.className = 'btn neutral footer-btn';
+        phone.textContent = 'Call Me';
+        actions.appendChild(phone);
+      }
+    }
+  }
+
   function isRemoveModeActive(){
     return !!document.querySelector('#admin-remove-item.active-remove');
   }
@@ -221,6 +259,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   normalizeResearchBackgroundArtifacts();
   initMotionEnhancements();
+  ensureFooterContactVisibility();
 
   remapProjectLinks();
 
