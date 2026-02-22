@@ -7,6 +7,13 @@
   const THEME_KEY = 'portfolio_theme';
   const HERO_SETTINGS_KEY = 'portfolio_hero_settings';
   const BACKGROUND_CLEANUP_KEY = 'portfolio_background_cleanup_v2';
+  const SYNC_CONFIG_KEY = 'portfolio_sync_config_v1';
+  const SYNC_META_KEY = 'portfolio_sync_meta_v1';
+  const SYNC_FILE_DEFAULT = 'portfolio-sync.json';
+  const PUBLIC_AUTO_PULL_GIST_ID = '022f30fe31719e1e69fdd0a9fb2a0215';
+  const PUBLIC_AUTO_PULL_ENABLED = true;
+  const SYNC_POLL_DEFAULT_SECONDS = 8;
+  const SYNC_PUSH_DEBOUNCE_MS = 1200;
   const CLICK_WINDOW_MS = 2200;
   const MONTHS_SHORT = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
   const MONTH_ALIASES = {
@@ -31,6 +38,9 @@
   let supportPopup = null;
   let supportHintTimer = null;
   let timelineCertAction = '';
+  let syncPushTimer = null;
+  let syncPollTimer = null;
+  let syncPullInFlight = false;
   const DEFAULT_HERO_SETTINGS = {
     design: 'diagonal',
     color1: '#041229',
@@ -42,6 +52,12 @@
     neonPurple: { design: 'aurora', color1: '#160a35', color2: '#5f1da8', color3: '#d13bff' },
     sunset: { design: 'radial', color1: '#2b1636', color2: '#d56a2a', color3: '#ffd166' }
   };
+  const MAX_UPLOAD_BYTES = {
+    image: 6 * 1024 * 1024,
+    video: 35 * 1024 * 1024,
+    audio: 20 * 1024 * 1024,
+    other: 10 * 1024 * 1024
+  };
   const STATIC_PROJECT_ROUTE_MAP = [
     { includes: ['fpga', '2‑bit cpu'], href: 'projects/fpga-learning-board.html' },
     { includes: ['citypulse', 'traffic intelligence'], href: 'projects/citypulse-traffic-intelligence.html' },
@@ -49,9 +65,32 @@
     { includes: ['pragyan rover'], href: 'projects/pragyan-rover.html' }
   ];
 
-  const pageIdentity = (window.location.pathname + window.location.search).replace(/[^a-z0-9]/gi, '_');
-  const pageStorageKey = PAGE_SNAPSHOT_PREFIX + pageIdentity;
-  const removeHistoryStorageKey = PAGE_REMOVE_HISTORY_PREFIX + pageIdentity;
+  function buildStableRouteId() {
+    const pathname = String(window.location.pathname || '/');
+    const parts = pathname.split('/').filter(Boolean);
+
+    let route = 'index.html';
+    const projectsIndex = parts.lastIndexOf('projects');
+    if (projectsIndex >= 0 && parts[projectsIndex + 1]) {
+      route = `projects/${parts[projectsIndex + 1]}`;
+    } else if (parts.length) {
+      route = parts[parts.length - 1];
+    }
+
+    const search = String(window.location.search || '');
+    if (search) {
+      route += search;
+    }
+
+    return route.toLowerCase();
+  }
+
+  const stablePageIdentity = buildStableRouteId().replace(/[^a-z0-9]/gi, '_');
+  const legacyPageIdentity = (window.location.pathname + window.location.search).replace(/[^a-z0-9]/gi, '_');
+  const pageStorageKey = PAGE_SNAPSHOT_PREFIX + stablePageIdentity;
+  const removeHistoryStorageKey = PAGE_REMOVE_HISTORY_PREFIX + stablePageIdentity;
+  const legacyPageStorageKey = PAGE_SNAPSHOT_PREFIX + legacyPageIdentity;
+  const legacyRemoveHistoryStorageKey = PAGE_REMOVE_HISTORY_PREFIX + legacyPageIdentity;
 
   function isAdminUnlocked() {
     if (sessionStorage.getItem(UNLOCK_KEY) === 'true') {
@@ -83,6 +122,574 @@
     } catch {
       return null;
     }
+  }
+
+  function loadSyncConfig() {
+    const parsed = safeParse(localStorage.getItem(SYNC_CONFIG_KEY) || '');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+
+    const provider = String(parsed.provider || '').trim().toLowerCase();
+    const gistId = String(parsed.gistId || '').trim();
+    const token = normalizeTokenInput(parsed.token || '');
+    const fileName = String(parsed.fileName || SYNC_FILE_DEFAULT).trim() || SYNC_FILE_DEFAULT;
+    const pollSeconds = parseInt(parsed.pollSeconds, 10);
+    const autoPull = parsed.autoPull !== false;
+    const autoPush = parsed.autoPush !== false;
+
+    if (provider !== 'github-gist') return null;
+    if (!gistId || !token) return null;
+
+    return {
+      provider,
+      gistId,
+      token,
+      fileName,
+      pollSeconds: Number.isFinite(pollSeconds) && pollSeconds >= 8 ? pollSeconds : SYNC_POLL_DEFAULT_SECONDS,
+      autoPull,
+      autoPush
+    };
+  }
+
+  function loadPullConfig() {
+    const configured = loadSyncConfig();
+    if (configured) return configured;
+
+    if (!PUBLIC_AUTO_PULL_ENABLED || !PUBLIC_AUTO_PULL_GIST_ID) {
+      return null;
+    }
+
+    return {
+      provider: 'github-gist',
+      gistId: PUBLIC_AUTO_PULL_GIST_ID,
+      token: '',
+      fileName: SYNC_FILE_DEFAULT,
+      pollSeconds: SYNC_POLL_DEFAULT_SECONDS,
+      autoPull: true,
+      autoPush: false
+    };
+  }
+
+  function saveSyncConfig(config) {
+    localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(config));
+  }
+
+  function clearSyncConfig() {
+    localStorage.removeItem(SYNC_CONFIG_KEY);
+    localStorage.removeItem(SYNC_META_KEY);
+  }
+
+  function loadSyncMeta() {
+    const parsed = safeParse(localStorage.getItem(SYNC_META_KEY) || '');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { lastAppliedAt: '', lastPushedAt: '' };
+    }
+
+    return {
+      lastAppliedAt: String(parsed.lastAppliedAt || ''),
+      lastPushedAt: String(parsed.lastPushedAt || '')
+    };
+  }
+
+  function saveSyncMeta(meta) {
+    localStorage.setItem(SYNC_META_KEY, JSON.stringify(meta));
+  }
+
+  function updateSyncMeta(updater) {
+    const current = loadSyncMeta();
+    const next = updater({ ...current }) || current;
+    saveSyncMeta(next);
+  }
+
+  function buildSyncPayload() {
+    return {
+      version: 1,
+      source: window.location.origin || 'file://local',
+      updatedAt: new Date().toISOString(),
+      data: collectPortfolioStorageData()
+    };
+  }
+
+  function compareIsoDate(a, b) {
+    const ta = Date.parse(String(a || ''));
+    const tb = Date.parse(String(b || ''));
+    if (!Number.isFinite(ta) || !Number.isFinite(tb)) return 0;
+    if (ta > tb) return 1;
+    if (ta < tb) return -1;
+    return 0;
+  }
+
+  function normalizeGistIdInput(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    const directMatch = raw.match(/^[a-f0-9]{20,}$/i);
+    if (directMatch) return directMatch[0];
+
+    const urlMatch = raw.match(/gist\.github\.com\/[\w-]+\/([a-f0-9]{20,})/i);
+    if (urlMatch && urlMatch[1]) return urlMatch[1];
+
+    const genericMatch = raw.match(/([a-f0-9]{20,})/i);
+    if (genericMatch && genericMatch[1]) return genericMatch[1];
+
+    return '';
+  }
+
+  function normalizeTokenInput(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    const withoutQuotes = raw.replace(/^['"]+|['"]+$/g, '');
+    const withoutPrefix = withoutQuotes
+      .replace(/^bearer\s+/i, '')
+      .replace(/^token\s+/i, '');
+
+    return withoutPrefix
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/\s+/g, '')
+      .replace(/[^A-Za-z0-9_]/g, '');
+  }
+
+  async function githubApiRequest(url, options, token) {
+    const cleanToken = normalizeTokenInput(token || '');
+    const requestOptions = options || {};
+    const requestHeaders = requestOptions.headers || {};
+    const baseHeaders = {
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...requestHeaders
+    };
+
+    if (!cleanToken) {
+      return fetch(url, {
+        ...requestOptions,
+        headers: baseHeaders,
+        cache: 'no-store'
+      });
+    }
+
+    let lastResponse = null;
+    const authSchemes = ['Bearer', 'token'];
+    for (const scheme of authSchemes) {
+      const response = await fetch(url, {
+        ...requestOptions,
+        headers: {
+          ...baseHeaders,
+          Authorization: `${scheme} ${cleanToken}`
+        },
+        cache: 'no-store'
+      });
+
+      lastResponse = response;
+      if (response.status !== 401) {
+        return response;
+      }
+    }
+
+    return lastResponse;
+  }
+
+  async function readGithubErrorMessage(response, fallbackLabel) {
+    const fallback = `${fallbackLabel} (${response.status}).`;
+    try {
+      const text = await response.text();
+      const parsed = safeParse(text || '');
+      const apiMessage = parsed && parsed.message ? String(parsed.message) : '';
+      if (apiMessage) return `${fallback} ${apiMessage}`;
+      return fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  async function validateSyncConfig(config) {
+    const response = await githubApiRequest(
+      `https://api.github.com/gists/${encodeURIComponent(config.gistId)}`,
+      { method: 'GET' },
+      config.token
+    );
+
+    if (!response.ok) {
+      throw new Error(await readGithubErrorMessage(response, 'Cloud sync validation failed'));
+    }
+
+    return true;
+  }
+
+  function applyPortfolioDataObject(dataObj) {
+    if (!dataObj || typeof dataObj !== 'object' || Array.isArray(dataObj)) return false;
+
+    const keysToRemove = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key && key.startsWith('portfolio_') && key !== SYNC_CONFIG_KEY && key !== SYNC_META_KEY) {
+        keysToRemove.push(key);
+      }
+    }
+
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
+
+    let appliedAny = false;
+    Object.entries(dataObj).forEach(([key, value]) => {
+      if (!key.startsWith('portfolio_')) return;
+      if (key === SYNC_CONFIG_KEY || key === SYNC_META_KEY) return;
+      if (typeof value !== 'string') return;
+      localStorage.setItem(key, value);
+      appliedAny = true;
+    });
+
+    return appliedAny;
+  }
+
+  function applyStateFromStorageToDom() {
+    restoreSnapshot();
+    restoreRemoveHistory();
+    applyHeroSettings(loadHeroSettings());
+    remapProjectLinks();
+    sortProjectTilesByYear();
+    sortTimelineByYear();
+    refreshTimelineSupportState();
+
+    if (document.documentElement.classList.contains('admin-mode')) {
+      makeEditable(true);
+      refreshProjectEditButtons(true);
+    }
+  }
+
+  async function fetchGistSyncPayload(config) {
+    const response = await githubApiRequest(
+      `https://api.github.com/gists/${encodeURIComponent(config.gistId)}`,
+      { method: 'GET' },
+      config.token
+    );
+
+    if (!response.ok) {
+      throw new Error(await readGithubErrorMessage(response, 'Sync pull failed'));
+    }
+
+    const gist = await response.json();
+    const files = gist && gist.files ? gist.files : {};
+    const preferred = files[config.fileName];
+    const firstFile = preferred || Object.values(files)[0];
+    let content = firstFile && typeof firstFile.content === 'string' ? firstFile.content : '';
+
+    const isTruncated = !!(firstFile && firstFile.truncated === true);
+    const rawUrl = firstFile && typeof firstFile.raw_url === 'string' ? firstFile.raw_url : '';
+
+    if ((isTruncated || !content) && rawUrl) {
+      try {
+        const rawResponse = await fetch(rawUrl, { cache: 'no-store' });
+        if (rawResponse.ok) {
+          content = await rawResponse.text();
+        }
+      } catch {
+        // keep existing content fallback
+      }
+    }
+
+    const normalizedContent = String(content || '').replace(/^\uFEFF/, '').trim();
+    const parsed = safeParse(normalizedContent);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Sync payload is invalid JSON.');
+    }
+
+    return parsed;
+  }
+
+  async function pushSyncToRemote(reason) {
+    const config = loadSyncConfig();
+    if (!config) return false;
+
+    const payload = buildSyncPayload();
+    const body = {
+      files: {
+        [config.fileName]: {
+          content: JSON.stringify(payload, null, 2)
+        }
+      }
+    };
+
+    const response = await githubApiRequest(
+      `https://api.github.com/gists/${encodeURIComponent(config.gistId)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      },
+      config.token
+    );
+
+    if (!response.ok) {
+      const originalError = await readGithubErrorMessage(response, 'Sync push failed');
+
+      if (response.status === 401 && reason === 'manual') {
+        const tokenInput = window.prompt(
+          'GitHub rejected token (401). Paste a fresh PAT with gist scope:',
+          ''
+        );
+
+        if (tokenInput !== null) {
+          const retryToken = normalizeTokenInput(tokenInput);
+          if (retryToken) {
+            const retryConfig = { ...config, token: retryToken };
+            saveSyncConfig(retryConfig);
+            startSyncPolling();
+
+            const retryResponse = await githubApiRequest(
+              `https://api.github.com/gists/${encodeURIComponent(retryConfig.gistId)}`,
+              {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+              },
+              retryConfig.token
+            );
+
+            if (retryResponse.ok) {
+              updateSyncMeta((meta) => {
+                meta.lastPushedAt = payload.updatedAt;
+                return meta;
+              });
+
+              if (adminPanel) {
+                window.alert('Cloud sync push completed. Token was refreshed.');
+              }
+              return true;
+            }
+
+            throw new Error(await readGithubErrorMessage(retryResponse, 'Sync push failed after token retry'));
+          }
+        }
+      }
+
+      throw new Error(originalError);
+    }
+
+    updateSyncMeta((meta) => {
+      meta.lastPushedAt = payload.updatedAt;
+      return meta;
+    });
+
+    if (reason === 'manual' && adminPanel) {
+      window.alert('Cloud sync push completed.');
+    }
+
+    return true;
+  }
+
+  async function pullSyncFromRemote(options) {
+    const settings = options || {};
+    const manual = settings.manual === true;
+    const forceReload = settings.forceReload === true;
+    const config = loadPullConfig();
+    if (!config) {
+      if (manual) window.alert('Cloud sync is not configured.');
+      return false;
+    }
+
+    if (syncPullInFlight) return false;
+
+    syncPullInFlight = true;
+    try {
+      const payload = await fetchGistSyncPayload(config);
+      const updatedAt = String(payload.updatedAt || '');
+      const lastAppliedAt = loadSyncMeta().lastAppliedAt;
+
+      if (!updatedAt) {
+        if (manual) window.alert('Cloud sync payload is missing updated timestamp.');
+        return false;
+      }
+
+      if (!manual && compareIsoDate(updatedAt, lastAppliedAt) <= 0) {
+        return false;
+      }
+
+      const applied = applyPortfolioDataObject(payload.data || {});
+      if (!applied) {
+        if (manual) window.alert('No portfolio data found in cloud sync payload.');
+        return false;
+      }
+
+      updateSyncMeta((meta) => {
+        meta.lastAppliedAt = updatedAt;
+        return meta;
+      });
+
+      applyStateFromStorageToDom();
+      if (!manual || forceReload) {
+        window.setTimeout(() => {
+          window.location.reload();
+        }, 80);
+      }
+      if (manual) {
+        window.alert('Cloud sync pull completed. This device is now up to date.');
+      }
+      return true;
+    } catch (error) {
+      if (manual) {
+        window.alert(String(error?.message || 'Cloud sync pull failed.'));
+      }
+      return false;
+    } finally {
+      syncPullInFlight = false;
+    }
+  }
+
+  function scheduleSyncPush(reason) {
+    const config = loadSyncConfig();
+    if (!config || !config.autoPush) return;
+
+    if (syncPushTimer) {
+      window.clearTimeout(syncPushTimer);
+      syncPushTimer = null;
+    }
+
+    syncPushTimer = window.setTimeout(async () => {
+      syncPushTimer = null;
+      try {
+        await pushSyncToRemote(reason || 'auto');
+      } catch {
+        // silent auto-sync failure
+      }
+    }, SYNC_PUSH_DEBOUNCE_MS);
+  }
+
+  function startSyncPolling() {
+    if (syncPollTimer) {
+      window.clearInterval(syncPollTimer);
+      syncPollTimer = null;
+    }
+
+    const config = loadPullConfig();
+    if (!config || !config.autoPull) return;
+
+    const intervalMs = Math.max(8, config.pollSeconds || SYNC_POLL_DEFAULT_SECONDS) * 1000;
+    syncPollTimer = window.setInterval(() => {
+      pullSyncFromRemote({ manual: false });
+    }, intervalMs);
+  }
+
+  async function setupCloudSync() {
+    const existing = loadSyncConfig() || {
+      provider: 'github-gist',
+      gistId: '',
+      token: '',
+      fileName: SYNC_FILE_DEFAULT,
+      pollSeconds: SYNC_POLL_DEFAULT_SECONDS,
+      autoPull: true,
+      autoPush: true
+    };
+
+    const gistInput = window.prompt('GitHub Gist ID (or paste full gist URL):', existing.gistId || '');
+    if (gistInput === null) return;
+    const gistId = normalizeGistIdInput(gistInput);
+    const tokenInput = window.prompt('GitHub Personal Access Token (needs gist scope):', existing.token || '');
+    if (tokenInput === null) return;
+    const token = normalizeTokenInput(tokenInput);
+    const fileName = window.prompt('Gist file name:', existing.fileName || SYNC_FILE_DEFAULT);
+    if (fileName === null) return;
+    const pollInput = window.prompt('Auto-pull interval in seconds (min 8):', String(existing.pollSeconds || SYNC_POLL_DEFAULT_SECONDS));
+    if (pollInput === null) return;
+
+    const pollSeconds = Math.max(8, parseInt(pollInput, 10) || SYNC_POLL_DEFAULT_SECONDS);
+    const autoPush = window.confirm('Enable auto-push on every admin edit/save?\nOK = yes, Cancel = no');
+    const autoPull = window.confirm('Enable auto-pull on this device?\nOK = yes, Cancel = no');
+
+    const nextConfig = {
+      provider: 'github-gist',
+      gistId,
+      token,
+      fileName: String(fileName || SYNC_FILE_DEFAULT).trim() || SYNC_FILE_DEFAULT,
+      pollSeconds,
+      autoPush,
+      autoPull
+    };
+
+    if (!nextConfig.gistId || !nextConfig.token) {
+      window.alert('Cloud sync not saved. Enter a valid Gist ID (or URL) and token.');
+      return;
+    }
+
+    try {
+      await validateSyncConfig(nextConfig);
+    } catch (error) {
+      window.alert(String(error?.message || 'Cloud sync validation failed.'));
+      return;
+    }
+
+    saveSyncConfig(nextConfig);
+    startSyncPolling();
+
+    const pushNow = window.confirm('Cloud sync configured. Push current site state to cloud now?');
+    if (pushNow) {
+      try {
+        await pushSyncToRemote('manual');
+      } catch (error) {
+        window.alert(String(error?.message || 'Cloud sync push failed.'));
+        return;
+      }
+    }
+
+    pullSyncFromRemote({ manual: false });
+    window.alert('Cloud sync is ready on this device.');
+  }
+
+  function bindSyncRefreshTriggers() {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      pullSyncFromRemote({ manual: false });
+    });
+
+    window.addEventListener('focus', () => {
+      pullSyncFromRemote({ manual: false });
+    });
+
+    window.addEventListener('pageshow', () => {
+      pullSyncFromRemote({ manual: false });
+    });
+
+    window.addEventListener('online', () => {
+      pullSyncFromRemote({ manual: false });
+    });
+
+    document.addEventListener('click', (event) => {
+      const toggle = event.target && event.target.closest ? event.target.closest('#theme-toggle') : null;
+      if (!toggle) return;
+      scheduleSyncPush('theme-toggle');
+    }, true);
+  }
+
+  function isAdminHostAllowed() {
+    const protocol = String(window.location.protocol || '').toLowerCase();
+    if (protocol === 'file:' || protocol === 'http:' || protocol === 'https:') return true;
+    return false;
+  }
+
+  function inferUploadKind(accept) {
+    const value = String(accept || '').toLowerCase();
+    if (value.includes('video')) return 'video';
+    if (value.includes('image')) return 'image';
+    if (value.includes('audio')) return 'audio';
+    return 'other';
+  }
+
+  function formatSize(bytes) {
+    const mb = bytes / (1024 * 1024);
+    return `${mb.toFixed(0)}MB`;
+  }
+
+  function validateUploadSize(file, kind) {
+    if (!file) return { ok: false, message: 'No file selected.' };
+    const limit = MAX_UPLOAD_BYTES[kind] || MAX_UPLOAD_BYTES.other;
+    if (file.size <= limit) return { ok: true, message: '' };
+
+    return {
+      ok: false,
+      message: `File too large (${formatSize(file.size)}). Max allowed for ${kind} is ${formatSize(limit)}.`
+    };
   }
 
   function stripInlineBackgroundDeclarations(styleValue) {
@@ -200,6 +807,7 @@
 
   function saveHeroSettings(settings) {
     localStorage.setItem(HERO_SETTINGS_KEY, JSON.stringify(settings));
+    scheduleSyncPush('hero-settings');
   }
 
   function applyHeroSettings(settings) {
@@ -302,6 +910,7 @@
 
   function saveDynamicProjects(projects) {
     localStorage.setItem(DYNAMIC_PROJECTS_KEY, JSON.stringify(projects));
+    scheduleSyncPush('dynamic-projects');
   }
 
   function createDynamicProjectRecord(payload) {
@@ -343,7 +952,13 @@
   }
 
   function restoreSnapshot() {
-    const raw = localStorage.getItem(pageStorageKey);
+    let raw = localStorage.getItem(pageStorageKey);
+    if (!raw && legacyPageStorageKey !== pageStorageKey) {
+      raw = localStorage.getItem(legacyPageStorageKey);
+      if (raw) {
+        localStorage.setItem(pageStorageKey, raw);
+      }
+    }
     if (!raw) return;
 
     const snapshot = safeParse(raw);
@@ -377,11 +992,21 @@
     if (footer) snapshot.footer = footer.innerHTML;
     if (resume) snapshot.resume = resume.innerHTML;
 
-    localStorage.setItem(pageStorageKey, JSON.stringify(snapshot));
+    const serialized = JSON.stringify(snapshot);
+    localStorage.setItem(pageStorageKey, serialized);
+    if (legacyPageStorageKey !== pageStorageKey) {
+      localStorage.setItem(legacyPageStorageKey, serialized);
+    }
+    scheduleSyncPush('snapshot');
   }
 
   function persistRemoveHistory() {
-    localStorage.setItem(removeHistoryStorageKey, JSON.stringify(removeHistory));
+    const serialized = JSON.stringify(removeHistory);
+    localStorage.setItem(removeHistoryStorageKey, serialized);
+    if (legacyRemoveHistoryStorageKey !== removeHistoryStorageKey) {
+      localStorage.setItem(legacyRemoveHistoryStorageKey, serialized);
+    }
+    scheduleSyncPush('remove-history');
   }
 
   function collectPortfolioStorageData() {
@@ -389,6 +1014,7 @@
     for (let index = 0; index < localStorage.length; index += 1) {
       const key = localStorage.key(index);
       if (!key || !key.startsWith('portfolio_')) continue;
+      if (key === SYNC_CONFIG_KEY || key === SYNC_META_KEY) continue;
       const value = localStorage.getItem(key);
       if (typeof value === 'string') {
         data[key] = value;
@@ -426,11 +1052,12 @@
     const keys = [];
     for (let index = 0; index < localStorage.length; index += 1) {
       const key = localStorage.key(index);
-      if (key && key.startsWith('portfolio_')) {
+      if (key && key.startsWith('portfolio_') && key !== SYNC_CONFIG_KEY && key !== SYNC_META_KEY) {
         keys.push(key);
       }
     }
     keys.forEach((key) => localStorage.removeItem(key));
+    scheduleSyncPush('clear-storage');
   }
 
   function normalizeBackupData(parsed) {
@@ -471,6 +1098,8 @@
           localStorage.setItem(key, value);
         });
 
+        scheduleSyncPush('import-backup');
+
         if (!localStorage.getItem(THEME_KEY)) {
           localStorage.setItem(THEME_KEY, 'light');
         }
@@ -485,7 +1114,13 @@
   }
 
   function restoreRemoveHistory() {
-    const raw = localStorage.getItem(removeHistoryStorageKey);
+    let raw = localStorage.getItem(removeHistoryStorageKey);
+    if (!raw && legacyRemoveHistoryStorageKey !== removeHistoryStorageKey) {
+      raw = localStorage.getItem(legacyRemoveHistoryStorageKey);
+      if (raw) {
+        localStorage.setItem(removeHistoryStorageKey, raw);
+      }
+    }
     if (!raw) return;
     const parsed = safeParse(raw);
     if (!Array.isArray(parsed)) return;
@@ -637,6 +1272,13 @@
       input.onchange = () => {
         const file = input.files && input.files[0];
         if (!file) return;
+
+        const validation = validateUploadSize(file, 'image');
+        if (!validation.ok) {
+          window.alert(validation.message);
+          return;
+        }
+
         const reader = new FileReader();
         reader.onload = () => {
           image.src = String(reader.result || '');
@@ -1272,8 +1914,15 @@
     input.onchange = () => {
       const files = Array.from(input.files || []);
       if (!files.length) return;
+      const kind = inferUploadKind(accept);
 
       files.forEach((file) => {
+        const validation = validateUploadSize(file, kind);
+        if (!validation.ok) {
+          window.alert(validation.message);
+          return;
+        }
+
         const reader = new FileReader();
         reader.onload = () => onLoad(String(reader.result || ''), file);
         reader.readAsDataURL(file);
@@ -1490,6 +2139,10 @@
       <div class="admin-backup-actions">
         <button type="button" id="admin-export-backup">Export Backup</button>
         <button type="button" id="admin-import-backup">Import Backup</button>
+        <button type="button" id="admin-setup-sync">Setup Cloud Sync</button>
+        <button type="button" id="admin-push-sync">Push Now</button>
+        <button type="button" id="admin-pull-sync">Pull Now</button>
+        <button type="button" id="admin-clear-sync">Clear Sync</button>
       </div>
       <div class="admin-index-actions" id="admin-index-actions">
         <button type="button" id="admin-add-project">Add Project Tile</button>
@@ -1558,6 +2211,24 @@
 
     adminPanel.querySelector('#admin-export-backup')?.addEventListener('click', exportAdminBackup);
     adminPanel.querySelector('#admin-import-backup')?.addEventListener('click', importAdminBackup);
+    adminPanel.querySelector('#admin-setup-sync')?.addEventListener('click', setupCloudSync);
+    adminPanel.querySelector('#admin-push-sync')?.addEventListener('click', async () => {
+      try {
+        await pushSyncToRemote('manual');
+      } catch (error) {
+        window.alert(String(error?.message || 'Cloud sync push failed.'));
+      }
+    });
+    adminPanel.querySelector('#admin-pull-sync')?.addEventListener('click', () => {
+      pullSyncFromRemote({ manual: true });
+    });
+    adminPanel.querySelector('#admin-clear-sync')?.addEventListener('click', () => {
+      const confirmed = window.confirm('Clear cloud sync configuration on this device?');
+      if (!confirmed) return;
+      clearSyncConfig();
+      startSyncPolling();
+      window.alert('Cloud sync configuration cleared on this device.');
+    });
 
     adminPanel.querySelector('#admin-undo-remove')?.addEventListener('click', undoLastRemoval);
     adminPanel.querySelector('#admin-undo-all')?.addEventListener('click', undoAllRemovals);
@@ -1595,6 +2266,11 @@
   }
 
   function unlockAdminWithPrompt() {
+    if (!isAdminHostAllowed()) {
+      window.alert('Admin mode is unavailable on this protocol. Open the page using file, http, or https.');
+      return;
+    }
+
     const input = window.prompt('Enter admin verification key:');
     if (input === null) return;
 
@@ -1642,6 +2318,8 @@
   }
 
   function initAdminRuntime() {
+    const canUseAdmin = isAdminHostAllowed();
+
     performBackgroundCleanupOnce();
     applyHeroSettings(loadHeroSettings());
     remapProjectLinks();
@@ -1652,16 +2330,19 @@
     bindProjectTileNavigation();
     bindTimelineSupportInteractions();
     bindRemoveHandlers();
+    bindSyncRefreshTriggers();
+    startSyncPolling();
+    pullSyncFromRemote({ manual: false });
 
     enforceLockedEditingState();
 
-    if (isAdminUnlocked()) {
+    if (canUseAdmin && isAdminUnlocked()) {
       createAdminPanel();
       makeEditable(true);
       refreshProjectEditButtons(true);
     }
 
-    if (!isAdminUnlocked()) {
+    if (!canUseAdmin || !isAdminUnlocked()) {
       makeEditable(false);
       refreshProjectEditButtons(false);
     }
