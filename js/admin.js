@@ -20,7 +20,7 @@
   const PREDEFINED_SYNC_AUTO_PULL = true;
   const PREDEFINED_SYNC_AUTO_PUSH = true;
   const PREDEFINED_SYNC_POLL_SECONDS = 5;
-  const GOOGLE_DRIVE_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzOBVkC2okCm7IyjVjZSbQYM7fMhCTrd5AXZgRjP15rAK4bONVt2suUrN-uCGeDhD5KdA/exec';
+  const GOOGLE_DRIVE_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbxU0N3Po9vgOabdbYejkAQSY36SCYEek3QMNOdGS-l-87O6bbS4c2j_RMn0rW6aeAVmfw/exec';
   const GOOGLE_DRIVE_UPLOAD_SECRET = 'Nv29xQ7mT4kL8pZa6cUd1fRy3sWh0JbE';
   const PUBLIC_AUTO_PULL_STORE_ID = '022f30fe31719e1e69fdd0a9fb2a0215';
   const PUBLIC_AUTO_PULL_ENABLED = true;
