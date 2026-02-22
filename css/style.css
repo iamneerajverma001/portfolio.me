@@ -239,8 +239,8 @@ body[data-hero-design="aurora"] .hero::before{background:conic-gradient(from 120
 
 /* Admin edit mode */
 .admin-mode [contenteditable="true"]{outline:1px dashed rgba(230,126,34,0.65);outline-offset:2px;cursor:text}
-#admin-panel{position:fixed;right:14px;bottom:14px;z-index:9999;background:#ffffff;border:1px solid rgba(10,25,47,0.18);border-radius:12px;padding:12px;box-shadow:0 16px 34px rgba(2,6,23,0.2);max-width:300px;font-family:'Lato',Arial,sans-serif}
-#admin-panel .admin-head{font-weight:800;color:#0A192F;margin-bottom:8px}
+#admin-panel{position:fixed;right:14px;bottom:14px;z-index:9999;background:#ffffff;border:1px solid rgba(10,25,47,0.18);border-radius:12px;padding:12px;box-shadow:0 16px 34px rgba(2,6,23,0.2);max-width:300px;max-height:78vh;overflow-y:auto;overflow-x:hidden;font-family:'Lato',Arial,sans-serif}
+#admin-panel .admin-head{font-weight:800;color:#0A192F;margin-bottom:8px;cursor:move;user-select:none}
 #admin-panel .admin-actions,#admin-panel .admin-backup-actions,#admin-panel .admin-index-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 #admin-panel .admin-project-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 #admin-panel .admin-banner-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}

@@ -2569,6 +2569,61 @@
     });
   }
 
+  function makeAdminPanelMovable() {
+    if (!adminPanel) return;
+    const head = adminPanel.querySelector('.admin-head');
+    if (!head) return;
+
+    let dragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+    const onPointerMove = (event) => {
+      if (!dragging || !adminPanel) return;
+
+      const margin = 8;
+      const maxLeft = Math.max(margin, window.innerWidth - adminPanel.offsetWidth - margin);
+      const maxTop = Math.max(margin, window.innerHeight - adminPanel.offsetHeight - margin);
+      const nextLeft = clamp(event.clientX - offsetX, margin, maxLeft);
+      const nextTop = clamp(event.clientY - offsetY, margin, maxTop);
+
+      adminPanel.style.left = `${nextLeft}px`;
+      adminPanel.style.top = `${nextTop}px`;
+      adminPanel.style.right = 'auto';
+      adminPanel.style.bottom = 'auto';
+    };
+
+    const stopDragging = () => {
+      dragging = false;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', stopDragging);
+      window.removeEventListener('pointercancel', stopDragging);
+    };
+
+    head.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      if (!adminPanel) return;
+
+      const rect = adminPanel.getBoundingClientRect();
+      offsetX = event.clientX - rect.left;
+      offsetY = event.clientY - rect.top;
+      dragging = true;
+
+      adminPanel.style.left = `${rect.left}px`;
+      adminPanel.style.top = `${rect.top}px`;
+      adminPanel.style.right = 'auto';
+      adminPanel.style.bottom = 'auto';
+
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', stopDragging);
+      window.addEventListener('pointercancel', stopDragging);
+
+      event.preventDefault();
+    });
+  }
+
   function createAdminPanel() {
     if (adminPanel) return;
 
@@ -2634,6 +2689,7 @@
     `;
 
     document.body.appendChild(adminPanel);
+    makeAdminPanelMovable();
 
     const onIndex = !!document.querySelector('.projects-grid');
     const onProjectPage = !!document.querySelector('.project-sections');
