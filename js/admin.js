@@ -166,6 +166,7 @@
     const secret = String(config?.secret || '').trim();
     if (!endpoint) {
       localStorage.removeItem(DRIVE_UPLOAD_CONFIG_KEY);
+      updateAdminSyncStatus('Drive upload integration disabled.');
       return;
     }
 
@@ -177,6 +178,25 @@
       })
     );
     scheduleSyncPush('drive-upload-config');
+    updateAdminSyncStatus('Drive upload integration saved.');
+  }
+
+  function updateAdminSyncStatus(message) {
+    if (!adminPanel) return;
+    const statusNode = adminPanel.querySelector('#admin-sync-status');
+    if (!statusNode) return;
+
+    const stored = safeParse(localStorage.getItem(DRIVE_UPLOAD_CONFIG_KEY) || '');
+    const hasCustomConfig = !!String(stored?.endpoint || '').trim();
+    const active = loadDriveUploadConfig();
+    const endpoint = String(active?.endpoint || '').trim();
+    const secret = String(active?.secret || '').trim();
+    const source = hasCustomConfig ? 'Custom' : 'Default';
+    const secretState = secret ? `set (${secret.length} chars)` : 'empty';
+    const endpointState = endpoint || 'not configured';
+
+    const suffix = message ? ` | ${String(message).trim()}` : '';
+    statusNode.textContent = `Drive Sync: ${source} | Endpoint: ${endpointState} | Secret: ${secretState}${suffix}`;
   }
 
   function setupDriveUploadConfig() {
@@ -2570,6 +2590,7 @@
         <button type="button" id="admin-pull-sync">Sync Pull</button>
         <button type="button" id="admin-clear-sync">Reset Drive Sync</button>
       </div>
+      <p id="admin-sync-status" class="admin-note"></p>
       <div class="admin-index-actions" id="admin-index-actions">
         <button type="button" id="admin-add-project">Add Project Tile</button>
         <button type="button" id="admin-add-skill">Add Skill Tile</button>
@@ -2635,6 +2656,8 @@
       window.alert('Changes saved for this page.');
     });
 
+    updateAdminSyncStatus();
+
     adminPanel.querySelector('#admin-export-backup')?.addEventListener('click', exportAdminBackup);
     adminPanel.querySelector('#admin-import-backup')?.addEventListener('click', importAdminBackup);
     adminPanel.querySelector('#admin-drive-setup')?.addEventListener('click', setupDriveUploadConfig);
@@ -2655,6 +2678,7 @@
       applyPredefinedSyncConfig({ force: true });
       startSyncPolling();
       pullSyncFromRemote({ manual: false });
+      updateAdminSyncStatus('Reset to predefined defaults.');
       window.alert('Drive Cloud Sync reset to predefined defaults on this device.');
     });
 
