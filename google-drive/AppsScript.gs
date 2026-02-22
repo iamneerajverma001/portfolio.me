@@ -4,6 +4,7 @@ const VIDEO_FOLDER_ID = '1ObdbM4GdokiWy-05nqdQX4FWAtxCVQKb';
 const AUDIO_FOLDER_ID = '1GjEvlXRADWNe81MOUZ2L99wJdYmMSBp_';
 const OTHER_FOLDER_ID = '1ZCfB3kRSY3zzegvyhe6v9mRPIdSozaX0';
 const SYNC_PAYLOAD_KEY = 'portfolio_sync_payload_v1';
+const SYNC_FILE_PREFIX = 'portfolio_sync_payload_';
 
 function doPost(e) {
   try {
@@ -68,22 +69,64 @@ function handleSyncPush(body) {
   }
 
   const serialized = JSON.stringify(payload);
-  PropertiesService.getScriptProperties().setProperty(SYNC_PAYLOAD_KEY, serialized);
+  const file = resolveSyncStorageFile(body, true);
+  file.setContent(serialized);
   return jsonResponse({ ok: true, updatedAt: String(payload.updatedAt || new Date().toISOString()) }, 200);
 }
 
 function handleSyncPull(body) {
-  const serialized = PropertiesService.getScriptProperties().getProperty(SYNC_PAYLOAD_KEY) || '';
-  if (!serialized) {
+  const syncFile = resolveSyncStorageFile(body, false);
+  const serializedFromFile = syncFile ? String(syncFile.getBlob().getDataAsString() || '') : '';
+
+  if (serializedFromFile) {
+    try {
+      const parsedFromFile = JSON.parse(serializedFromFile);
+      return jsonResponse({ ok: true, payload: parsedFromFile }, 200);
+    } catch (error) {
+      return jsonResponse({ ok: false, error: 'Stored sync payload file is corrupted.' }, 500);
+    }
+  }
+
+  const legacySerialized = PropertiesService.getScriptProperties().getProperty(SYNC_PAYLOAD_KEY) || '';
+  if (!legacySerialized) {
     return jsonResponse({ ok: true, payload: null }, 200);
   }
 
   try {
-    const parsed = JSON.parse(serialized);
+    const parsed = JSON.parse(legacySerialized);
+    const newSyncFile = resolveSyncStorageFile(body, true);
+    newSyncFile.setContent(legacySerialized);
     return jsonResponse({ ok: true, payload: parsed }, 200);
   } catch (error) {
     return jsonResponse({ ok: false, error: 'Stored sync payload is corrupted.' }, 500);
   }
+}
+
+function resolveSyncStorageFile(body, createIfMissing) {
+  const folder = resolveSyncFolder();
+  const fileName = buildSyncPayloadFileName(body);
+  const files = folder.getFilesByName(fileName);
+  if (files.hasNext()) {
+    return files.next();
+  }
+
+  if (!createIfMissing) return null;
+  return folder.createFile(fileName, '{}', MimeType.PLAIN_TEXT);
+}
+
+function resolveSyncFolder() {
+  if (OTHER_FOLDER_ID) return DriveApp.getFolderById(OTHER_FOLDER_ID);
+  return DriveApp.getRootFolder();
+}
+
+function buildSyncPayloadFileName(body) {
+  const rawStoreId = String((body && body.syncStoreId) || 'default').trim().toLowerCase();
+  const rawFileName = String((body && body.fileName) || 'portfolio-sync.json').trim().toLowerCase();
+
+  const safeStoreId = rawStoreId.replace(/[^a-z0-9_-]/g, '_').slice(0, 64) || 'default';
+  const safeFileName = rawFileName.replace(/[^a-z0-9._-]/g, '_').slice(0, 64) || 'portfolio-sync.json';
+
+  return `${SYNC_FILE_PREFIX}${safeStoreId}__${safeFileName}`;
 }
 
 function resolveFolder(kind) {
