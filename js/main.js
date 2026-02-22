@@ -194,6 +194,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     const actions = footer.querySelector('.contact-actions');
     if(actions){
+      const normalizeContactButton = (anchor, fallbackText)=>{
+        if(!anchor) return;
+        anchor.classList.add('btn', 'neutral', 'footer-btn');
+        const plainText = (anchor.textContent || '').replace(/\s+/g, ' ').trim();
+        if(!plainText) anchor.textContent = fallbackText;
+        anchor.style.setProperty('color', '#ffffff', 'important');
+        anchor.style.setProperty('-webkit-text-fill-color', '#ffffff', 'important');
+        anchor.style.setProperty('background', 'rgba(255,255,255,0.2)', 'important');
+        anchor.style.setProperty('border', '1px solid rgba(255,255,255,0.45)', 'important');
+        anchor.style.setProperty('opacity', '1', 'important');
+        anchor.style.setProperty('visibility', 'visible', 'important');
+      };
+
       const hasMail = !!actions.querySelector('a[href^="mailto:"]');
       const hasTel = !!actions.querySelector('a[href^="tel:"]');
 
@@ -212,6 +225,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
         phone.textContent = 'Call Me';
         actions.appendChild(phone);
       }
+
+      const mailAnchor = actions.querySelector('a[href^="mailto:"]');
+      const telAnchor = actions.querySelector('a[href^="tel:"]');
+      normalizeContactButton(mailAnchor, 'Email Me');
+      normalizeContactButton(telAnchor, 'Call Me');
     }
   }
 
