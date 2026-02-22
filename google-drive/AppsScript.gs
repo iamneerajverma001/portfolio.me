@@ -1,0 +1,61 @@
+const UPLOAD_SECRET = 'Nv29xQ7mT4kL8pZa6cUd1fRy3sWh0JbE';
+const IMAGE_FOLDER_ID = '1qRmd9xdVIY8zR4hLbe9i92rfmtwkEnHw';
+const VIDEO_FOLDER_ID = '1ObdbM4GdokiWy-05nqdQX4FWAtxCVQKb';
+const AUDIO_FOLDER_ID = '1GjEvlXRADWNe81MOUZ2L99wJdYmMSBp_';
+const OTHER_FOLDER_ID = '1ZCfB3kRSY3zzegvyhe6v9mRPIdSozaX0';
+
+function doPost(e) {
+  try {
+    const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    const secret = String(body.secret || '').trim();
+    if (String(UPLOAD_SECRET || '').trim() && secret !== String(UPLOAD_SECRET || '').trim()) {
+      return jsonResponse({ ok: false, error: 'Unauthorized secret.' }, 401);
+    }
+
+    const fileName = String(body.fileName || '').trim();
+    const mimeType = String(body.mimeType || 'application/octet-stream').trim();
+    const kind = String(body.kind || 'other').trim().toLowerCase();
+    const contentBase64 = String(body.contentBase64 || '').trim();
+
+    if (!fileName || !contentBase64) {
+      return jsonResponse({ ok: false, error: 'Missing file payload.' }, 400);
+    }
+
+    const bytes = Utilities.base64Decode(contentBase64);
+    const blob = Utilities.newBlob(bytes, mimeType, fileName);
+
+    const folder = resolveFolder(kind);
+    const file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    const fileId = file.getId();
+    const streamUrl = `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`;
+    const previewUrl = `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view`;
+
+    return jsonResponse({
+      ok: true,
+      fileId,
+      streamUrl,
+      previewUrl,
+      url: streamUrl,
+      name: file.getName(),
+      mimeType: file.getMimeType()
+    }, 200);
+  } catch (error) {
+    return jsonResponse({ ok: false, error: String(error && error.message ? error.message : error) }, 500);
+  }
+}
+
+function resolveFolder(kind) {
+  if (kind === 'image' && IMAGE_FOLDER_ID) return DriveApp.getFolderById(IMAGE_FOLDER_ID);
+  if (kind === 'video' && VIDEO_FOLDER_ID) return DriveApp.getFolderById(VIDEO_FOLDER_ID);
+  if (kind === 'audio' && AUDIO_FOLDER_ID) return DriveApp.getFolderById(AUDIO_FOLDER_ID);
+  if (OTHER_FOLDER_ID) return DriveApp.getFolderById(OTHER_FOLDER_ID);
+  return DriveApp.getRootFolder();
+}
+
+function jsonResponse(payload, statusCode) {
+  const response = ContentService.createTextOutput(JSON.stringify(payload));
+  response.setMimeType(ContentService.MimeType.JSON);
+  return response;
+}

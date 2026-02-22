@@ -6,14 +6,25 @@
   const DYNAMIC_PROJECTS_KEY = 'portfolio_dynamic_projects';
   const THEME_KEY = 'portfolio_theme';
   const HERO_SETTINGS_KEY = 'portfolio_hero_settings';
+  const DRIVE_UPLOAD_CONFIG_KEY = 'portfolio_drive_upload_config_v1';
   const BACKGROUND_CLEANUP_KEY = 'portfolio_background_cleanup_v2';
   const SYNC_CONFIG_KEY = 'portfolio_sync_config_v1';
   const SYNC_META_KEY = 'portfolio_sync_meta_v1';
   const SYNC_FILE_DEFAULT = 'portfolio-sync.json';
-  const PUBLIC_AUTO_PULL_GIST_ID = '3f406008428e8a41a9437d6432756915';
+  const PREDEFINED_SYNC_ENABLED = true;
+  const PREDEFINED_SYNC_GIST_ID = '022f30fe31719e1e69fdd0a9fb2a0215';
+  const PREDEFINED_SYNC_TOKEN = '';
+  const PREDEFINED_SYNC_FILE = SYNC_FILE_DEFAULT;
+  const PREDEFINED_SYNC_AUTO_PULL = true;
+  const PREDEFINED_SYNC_AUTO_PUSH = true;
+  const PREDEFINED_SYNC_POLL_SECONDS = 5;
+  const GOOGLE_DRIVE_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzOBVkC2okCm7IyjVjZSbQYM7fMhCTrd5AXZgRjP15rAK4bONVt2suUrN-uCGeDhD5KdA/exec';
+  const GOOGLE_DRIVE_UPLOAD_SECRET = 'Nv29xQ7mT4kL8pZa6cUd1fRy3sWh0JbE';
+  const PUBLIC_AUTO_PULL_GIST_ID = '022f30fe31719e1e69fdd0a9fb2a0215';
   const PUBLIC_AUTO_PULL_ENABLED = true;
-  const SYNC_POLL_DEFAULT_SECONDS = 8;
+  const SYNC_POLL_DEFAULT_SECONDS = 5;
   const SYNC_PUSH_DEBOUNCE_MS = 1200;
+  const SNAPSHOT_SAVE_DEBOUNCE_MS = 700;
   const CLICK_WINDOW_MS = 2200;
   const MONTHS_SHORT = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
   const MONTH_ALIASES = {
@@ -41,6 +52,7 @@
   let syncPushTimer = null;
   let syncPollTimer = null;
   let syncPullInFlight = false;
+  let snapshotSaveTimer = null;
   const DEFAULT_HERO_SETTINGS = {
     design: 'diagonal',
     color1: '#041229',
@@ -53,9 +65,15 @@
     sunset: { design: 'radial', color1: '#2b1636', color2: '#d56a2a', color3: '#ffd166' }
   };
   const MAX_UPLOAD_BYTES = {
-    image: 6 * 1024 * 1024,
-    video: 35 * 1024 * 1024,
-    audio: 20 * 1024 * 1024,
+    image: 2 * 1024 * 1024,
+    video: 3 * 1024 * 1024,
+    audio: 2 * 1024 * 1024,
+    other: 2 * 1024 * 1024
+  };
+  const MAX_UPLOAD_BYTES_DRIVE = {
+    image: 12 * 1024 * 1024,
+    video: 180 * 1024 * 1024,
+    audio: 30 * 1024 * 1024,
     other: 10 * 1024 * 1024
   };
   const STATIC_PROJECT_ROUTE_MAP = [
@@ -124,9 +142,66 @@
     }
   }
 
+  function loadDriveUploadConfig() {
+    const parsed = safeParse(localStorage.getItem(DRIVE_UPLOAD_CONFIG_KEY) || '');
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const endpoint = String(parsed.endpoint || '').trim();
+      const secret = String(parsed.secret || '').trim();
+      if (endpoint) {
+        return { endpoint, secret };
+      }
+    }
+
+    const fallbackEndpoint = String(GOOGLE_DRIVE_UPLOAD_URL || '').trim();
+    const fallbackSecret = String(GOOGLE_DRIVE_UPLOAD_SECRET || '').trim();
+    if (!fallbackEndpoint) return null;
+    return { endpoint: fallbackEndpoint, secret: fallbackSecret };
+  }
+
+  function saveDriveUploadConfig(config) {
+    const endpoint = String(config?.endpoint || '').trim();
+    const secret = String(config?.secret || '').trim();
+    if (!endpoint) {
+      localStorage.removeItem(DRIVE_UPLOAD_CONFIG_KEY);
+      return;
+    }
+
+    localStorage.setItem(
+      DRIVE_UPLOAD_CONFIG_KEY,
+      JSON.stringify({
+        endpoint,
+        secret
+      })
+    );
+    scheduleSyncPush('drive-upload-config');
+  }
+
+  function setupDriveUploadConfig() {
+    const existing = loadDriveUploadConfig() || { endpoint: '', secret: '' };
+    const endpointInput = window.prompt('Google Drive upload endpoint URL (Apps Script Web App URL):', existing.endpoint || '');
+    if (endpointInput === null) return;
+
+    const endpoint = String(endpointInput || '').trim();
+    if (!endpoint) {
+      const clear = window.confirm('Endpoint empty. Disable Drive upload integration?');
+      if (!clear) return;
+      saveDriveUploadConfig({ endpoint: '', secret: '' });
+      window.alert('Drive upload integration disabled.');
+      return;
+    }
+
+    const secretInput = window.prompt('Upload secret (optional, should match Apps Script UPLOAD_SECRET):', existing.secret || '');
+    if (secretInput === null) return;
+
+    saveDriveUploadConfig({ endpoint, secret: String(secretInput || '').trim() });
+    window.alert('Drive upload integration saved and will sync across devices.');
+  }
+
   function loadSyncConfig() {
     const parsed = safeParse(localStorage.getItem(SYNC_CONFIG_KEY) || '');
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return getPredefinedSyncConfig();
+    }
 
     const provider = String(parsed.provider || '').trim().toLowerCase();
     const gistId = String(parsed.gistId || '').trim();
@@ -136,18 +211,57 @@
     const autoPull = parsed.autoPull !== false;
     const autoPush = parsed.autoPush !== false;
 
-    if (provider !== 'github-gist') return null;
-    if (!gistId || !token) return null;
+    if (provider !== 'github-gist') return getPredefinedSyncConfig();
+    if (!gistId || !token) return getPredefinedSyncConfig();
 
     return {
       provider,
       gistId,
       token,
       fileName,
-      pollSeconds: Number.isFinite(pollSeconds) && pollSeconds >= 8 ? pollSeconds : SYNC_POLL_DEFAULT_SECONDS,
+      pollSeconds: Number.isFinite(pollSeconds) && pollSeconds >= 5 ? pollSeconds : SYNC_POLL_DEFAULT_SECONDS,
       autoPull,
       autoPush
     };
+  }
+
+  function getPredefinedSyncConfig() {
+    if (!PREDEFINED_SYNC_ENABLED) return null;
+
+    const gistId = normalizeGistIdInput(PREDEFINED_SYNC_GIST_ID);
+    const token = normalizeTokenInput(PREDEFINED_SYNC_TOKEN);
+    if (!gistId) return null;
+
+    const pollSeconds = Math.max(5, parseInt(PREDEFINED_SYNC_POLL_SECONDS, 10) || SYNC_POLL_DEFAULT_SECONDS);
+    const autoPull = PREDEFINED_SYNC_AUTO_PULL !== false;
+    const autoPush = PREDEFINED_SYNC_AUTO_PUSH !== false && !!token;
+
+    return {
+      provider: 'github-gist',
+      gistId,
+      token,
+      fileName: String(PREDEFINED_SYNC_FILE || SYNC_FILE_DEFAULT).trim() || SYNC_FILE_DEFAULT,
+      pollSeconds,
+      autoPull,
+      autoPush
+    };
+  }
+
+  function applyPredefinedSyncConfig(options) {
+    const settings = options || {};
+    const force = settings.force === true;
+    const predefined = getPredefinedSyncConfig();
+    if (!predefined) return null;
+
+    if (!force) {
+      const existing = safeParse(localStorage.getItem(SYNC_CONFIG_KEY) || '');
+      if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+        return predefined;
+      }
+    }
+
+    saveSyncConfig(predefined);
+    return predefined;
   }
 
   function getPublicPullConfig() {
@@ -595,65 +709,22 @@
     const config = loadPullConfig();
     if (!config || !config.autoPull) return;
 
-    const intervalMs = Math.max(8, config.pollSeconds || SYNC_POLL_DEFAULT_SECONDS) * 1000;
+    const intervalMs = Math.max(5, config.pollSeconds || SYNC_POLL_DEFAULT_SECONDS) * 1000;
     syncPollTimer = window.setInterval(() => {
       pullSyncFromRemote({ manual: false });
     }, intervalMs);
   }
 
   async function setupCloudSync() {
-    const existing = loadSyncConfig() || {
-      provider: 'github-gist',
-      gistId: '',
-      token: '',
-      fileName: SYNC_FILE_DEFAULT,
-      pollSeconds: SYNC_POLL_DEFAULT_SECONDS,
-      autoPull: true,
-      autoPush: true
-    };
-
-    const gistInput = window.prompt('GitHub Gist ID (or paste full gist URL):', existing.gistId || '');
-    if (gistInput === null) return;
-    const gistId = normalizeGistIdInput(gistInput);
-    const tokenInput = window.prompt('GitHub Personal Access Token (needs gist scope):', existing.token || '');
-    if (tokenInput === null) return;
-    const token = normalizeTokenInput(tokenInput);
-    const fileName = window.prompt('Gist file name:', existing.fileName || SYNC_FILE_DEFAULT);
-    if (fileName === null) return;
-    const pollInput = window.prompt('Auto-pull interval in seconds (min 8):', String(existing.pollSeconds || SYNC_POLL_DEFAULT_SECONDS));
-    if (pollInput === null) return;
-
-    const pollSeconds = Math.max(8, parseInt(pollInput, 10) || SYNC_POLL_DEFAULT_SECONDS);
-    const autoPush = window.confirm('Enable auto-push on every admin edit/save?\nOK = yes, Cancel = no');
-    const autoPull = window.confirm('Enable auto-pull on this device?\nOK = yes, Cancel = no');
-
-    const nextConfig = {
-      provider: 'github-gist',
-      gistId,
-      token,
-      fileName: String(fileName || SYNC_FILE_DEFAULT).trim() || SYNC_FILE_DEFAULT,
-      pollSeconds,
-      autoPush,
-      autoPull
-    };
-
-    if (!nextConfig.gistId || !nextConfig.token) {
-      window.alert('Cloud sync not saved. Enter a valid Gist ID (or URL) and token.');
+    const nextConfig = applyPredefinedSyncConfig({ force: true });
+    if (!nextConfig) {
+      window.alert('Predefined cloud sync is not available.');
       return;
     }
 
-    try {
-      await validateSyncConfig(nextConfig);
-    } catch (error) {
-      window.alert(String(error?.message || 'Cloud sync validation failed.'));
-      return;
-    }
-
-    saveSyncConfig(nextConfig);
     startSyncPolling();
 
-    const pushNow = window.confirm('Cloud sync configured. Push current site state to cloud now?');
-    if (pushNow) {
+    if (nextConfig.autoPush) {
       try {
         await pushSyncToRemote('manual');
       } catch (error) {
@@ -663,7 +734,7 @@
     }
 
     pullSyncFromRemote({ manual: false });
-    window.alert('Cloud sync is ready on this device.');
+    window.alert('Cloud sync is running with predefined defaults on this device.');
   }
 
   function bindSyncRefreshTriggers() {
@@ -710,9 +781,99 @@
     return `${mb.toFixed(0)}MB`;
   }
 
+  function isGoogleDriveUploadConfigured() {
+    const config = loadDriveUploadConfig();
+    return !!String(config?.endpoint || '').trim();
+  }
+
+  function extractGoogleDriveFileId(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    const filePathMatch = raw.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]{10,})/i);
+    if (filePathMatch && filePathMatch[1]) return filePathMatch[1];
+
+    const openIdMatch = raw.match(/[?&]id=([a-zA-Z0-9_-]{10,})/i);
+    if (openIdMatch && openIdMatch[1]) return openIdMatch[1];
+
+    const ucMatch = raw.match(/\/d\/([a-zA-Z0-9_-]{10,})/i);
+    if (ucMatch && ucMatch[1]) return ucMatch[1];
+
+    return '';
+  }
+
+  function normalizeMediaUrlForPlayback(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    const driveId = extractGoogleDriveFileId(raw);
+    if (!driveId) return raw;
+
+    return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(driveId)}`;
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Unable to read file.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadFileToGoogleDrive(file, kind) {
+    const config = loadDriveUploadConfig();
+    const endpoint = String(config?.endpoint || '').trim();
+    if (!endpoint) return null;
+
+    const dataUrl = await readFileAsDataUrl(file);
+    const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : '';
+    if (!base64) {
+      throw new Error('Unable to encode file for upload.');
+    }
+
+    const payload = {
+      fileName: String(file?.name || `upload-${Date.now()}`),
+      mimeType: String(file?.type || 'application/octet-stream'),
+      kind: String(kind || 'other'),
+      contentBase64: base64,
+      secret: String(config?.secret || '')
+    };
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload),
+      cache: 'no-store'
+    });
+
+    if (!response.ok) {
+      throw new Error(`Google Drive upload failed (${response.status}).`);
+    }
+
+    const result = await response.json();
+    if (!result || result.ok === false) {
+      throw new Error(String(result?.error || 'Google Drive upload failed.'));
+    }
+
+    const candidate =
+      String(result.streamUrl || result.url || result.webContentLink || result.fileUrl || '').trim() ||
+      (result.fileId ? `https://drive.google.com/uc?export=download&id=${encodeURIComponent(String(result.fileId))}` : '');
+
+    if (!candidate) {
+      throw new Error('Upload succeeded but no media URL was returned.');
+    }
+
+    return normalizeMediaUrlForPlayback(candidate);
+  }
+
   function validateUploadSize(file, kind) {
     if (!file) return { ok: false, message: 'No file selected.' };
-    const limit = MAX_UPLOAD_BYTES[kind] || MAX_UPLOAD_BYTES.other;
+    const useDriveLimits = isGoogleDriveUploadConfigured() && (kind === 'image' || kind === 'video' || kind === 'audio');
+    const limits = useDriveLimits ? MAX_UPLOAD_BYTES_DRIVE : MAX_UPLOAD_BYTES;
+    const limit = limits[kind] || limits.other;
     if (file.size <= limit) return { ok: true, message: '' };
 
     return {
@@ -1022,11 +1183,60 @@
     if (resume) snapshot.resume = resume.innerHTML;
 
     const serialized = JSON.stringify(snapshot);
-    localStorage.setItem(pageStorageKey, serialized);
-    if (legacyPageStorageKey !== pageStorageKey) {
-      localStorage.setItem(legacyPageStorageKey, serialized);
+    try {
+      localStorage.setItem(pageStorageKey, serialized);
+      if (legacyPageStorageKey !== pageStorageKey) {
+        localStorage.setItem(legacyPageStorageKey, serialized);
+      }
+      scheduleSyncPush('snapshot');
+    } catch (error) {
+      window.alert('Save failed: browser storage is full. Use smaller media files or use hosted media URLs for cross-device sync.');
+      throw error;
     }
-    scheduleSyncPush('snapshot');
+  }
+
+  function flushPendingSnapshotSave() {
+    if (!snapshotSaveTimer) return;
+    window.clearTimeout(snapshotSaveTimer);
+    snapshotSaveTimer = null;
+    saveSnapshot();
+  }
+
+  function scheduleSnapshotSave() {
+    if (!document.documentElement.classList.contains('admin-mode')) return;
+
+    if (snapshotSaveTimer) {
+      window.clearTimeout(snapshotSaveTimer);
+      snapshotSaveTimer = null;
+    }
+
+    snapshotSaveTimer = window.setTimeout(() => {
+      snapshotSaveTimer = null;
+      saveSnapshot();
+    }, SNAPSHOT_SAVE_DEBOUNCE_MS);
+  }
+
+  function bindEditableAutoSave() {
+    const shouldTrackNode = (node) => {
+      if (!node || !(node instanceof Element)) return false;
+      if (node.closest('#admin-panel')) return false;
+
+      if (node.closest('[contenteditable="true"]')) return true;
+      if (node.getAttribute && node.getAttribute('contenteditable') === 'true') return true;
+      return false;
+    };
+
+    document.addEventListener('input', (event) => {
+      if (!document.documentElement.classList.contains('admin-mode')) return;
+      if (!shouldTrackNode(event.target)) return;
+      scheduleSnapshotSave();
+    }, true);
+
+    document.addEventListener('blur', (event) => {
+      if (!document.documentElement.classList.contains('admin-mode')) return;
+      if (!shouldTrackNode(event.target)) return;
+      flushPendingSnapshotSave();
+    }, true);
   }
 
   function persistRemoveHistory() {
@@ -1940,22 +2150,40 @@
     input.type = 'file';
     input.accept = accept;
     input.multiple = !!multiple;
-    input.onchange = () => {
+    input.onchange = async () => {
       const files = Array.from(input.files || []);
       if (!files.length) return;
       const kind = inferUploadKind(accept);
 
-      files.forEach((file) => {
+      for (const file of files) {
         const validation = validateUploadSize(file, kind);
         if (!validation.ok) {
           window.alert(validation.message);
-          return;
+          continue;
         }
 
-        const reader = new FileReader();
-        reader.onload = () => onLoad(String(reader.result || ''), file);
-        reader.readAsDataURL(file);
-      });
+        if (isGoogleDriveUploadConfigured() && (kind === 'image' || kind === 'video' || kind === 'audio')) {
+          try {
+            const remoteUrl = await uploadFileToGoogleDrive(file, kind);
+            if (!remoteUrl) {
+              window.alert('Google Drive upload did not return a URL.');
+              continue;
+            }
+            await Promise.resolve(onLoad(remoteUrl, file));
+            continue;
+          } catch (error) {
+            window.alert(String(error?.message || 'Google Drive upload failed.'));
+            continue;
+          }
+        }
+
+        try {
+          const dataUrl = await readFileAsDataUrl(file);
+          await Promise.resolve(onLoad(dataUrl, file));
+        } catch {
+          window.alert('Unable to read selected file.');
+        }
+      }
     };
     input.click();
   }
@@ -2000,6 +2228,29 @@
       return;
     }
 
+    const urlInput = window.prompt('Paste image URL (https://...) to sync by reference, or leave blank to upload file(s):', '');
+    if (urlInput === null) return;
+    const trimmedUrl = normalizeMediaUrlForPlayback(urlInput);
+    if (trimmedUrl) {
+      const placeholder = block.querySelector('.media-placeholder');
+      if (placeholder) placeholder.remove();
+
+      const mediaList = ensureProjectMediaList(block);
+      const mediaItem = document.createElement('div');
+      mediaItem.className = 'admin-media-item';
+
+      const image = document.createElement('img');
+      image.className = 'admin-project-image';
+      image.src = trimmedUrl;
+      image.alt = 'Project image';
+      image.loading = 'lazy';
+      mediaItem.appendChild(image);
+      attachMediaRemoveButton(mediaItem);
+      mediaList.appendChild(mediaItem);
+      saveSnapshot();
+      return;
+    }
+
     pickFiles('image/*', true, (dataUrl) => {
       const placeholder = block.querySelector('.media-placeholder');
       if (placeholder) placeholder.remove();
@@ -2026,6 +2277,28 @@
       return;
     }
 
+    const urlInput = window.prompt('Paste video URL (https://...) to sync by reference, or leave blank to upload file(s):', '');
+    if (urlInput === null) return;
+    const trimmedUrl = normalizeMediaUrlForPlayback(urlInput);
+    if (trimmedUrl) {
+      const placeholder = block.querySelector('.media-placeholder');
+      if (placeholder) placeholder.remove();
+
+      const mediaList = ensureProjectMediaList(block);
+      const mediaItem = document.createElement('div');
+      mediaItem.className = 'admin-media-item';
+
+      const video = document.createElement('video');
+      video.className = 'admin-project-video';
+      video.controls = true;
+      video.src = trimmedUrl;
+      mediaItem.appendChild(video);
+      attachMediaRemoveButton(mediaItem);
+      mediaList.appendChild(mediaItem);
+      saveSnapshot();
+      return;
+    }
+
     pickFiles('video/*', true, (dataUrl) => {
       const placeholder = block.querySelector('.media-placeholder');
       if (placeholder) placeholder.remove();
@@ -2049,6 +2322,28 @@
     const block = findProjectBlockByTitle('Project Audio') || findProjectBlockByTitle('Audio') || findProjectBlockByTitle('Project Video') || findProjectBlockByTitle('Video');
     if (!block) {
       window.alert('Project Audio/Video section not found.');
+      return;
+    }
+
+    const urlInput = window.prompt('Paste audio URL (https://...) to sync by reference, or leave blank to upload file(s):', '');
+    if (urlInput === null) return;
+    const trimmedUrl = normalizeMediaUrlForPlayback(urlInput);
+    if (trimmedUrl) {
+      const placeholder = block.querySelector('.media-placeholder');
+      if (placeholder) placeholder.remove();
+
+      const mediaList = ensureProjectMediaList(block);
+      const mediaItem = document.createElement('div');
+      mediaItem.className = 'admin-media-item';
+
+      const audio = document.createElement('audio');
+      audio.className = 'admin-project-audio';
+      audio.controls = true;
+      audio.src = trimmedUrl;
+      mediaItem.appendChild(audio);
+      attachMediaRemoveButton(mediaItem);
+      mediaList.appendChild(mediaItem);
+      saveSnapshot();
       return;
     }
 
@@ -2168,10 +2463,10 @@
       <div class="admin-backup-actions">
         <button type="button" id="admin-export-backup">Export Backup</button>
         <button type="button" id="admin-import-backup">Import Backup</button>
-        <button type="button" id="admin-setup-sync">Setup Cloud Sync</button>
+        <button type="button" id="admin-drive-setup">Drive Upload</button>
         <button type="button" id="admin-push-sync">Push Now</button>
         <button type="button" id="admin-pull-sync">Pull Now</button>
-        <button type="button" id="admin-clear-sync">Clear Sync</button>
+        <button type="button" id="admin-clear-sync">Reset Sync</button>
       </div>
       <div class="admin-index-actions" id="admin-index-actions">
         <button type="button" id="admin-add-project">Add Project Tile</button>
@@ -2212,7 +2507,7 @@
         <button type="button" id="admin-apply-color">Apply Text Color</button>
         <span id="admin-color-hint" class="admin-color-hint" aria-live="polite"></span>
       </div>
-      <p class="admin-note">Tip: click any image to replace it. Double-click links to edit URL. Double-click a project tile to open its subpage. Double-click popup image to open full-size. Use Attach/Remove Cert for direct certificate control.</p>
+      <p class="admin-note">Tip: click any image to replace it. Use Drive Upload once, then Set Image/Video/Audio can upload directly to Drive for cross-device sync. Double-click links to edit URL. Double-click a project tile to open its subpage. Double-click popup image to open full-size. Use Attach/Remove Cert for direct certificate control.</p>
     `;
 
     document.body.appendChild(adminPanel);
@@ -2240,7 +2535,7 @@
 
     adminPanel.querySelector('#admin-export-backup')?.addEventListener('click', exportAdminBackup);
     adminPanel.querySelector('#admin-import-backup')?.addEventListener('click', importAdminBackup);
-    adminPanel.querySelector('#admin-setup-sync')?.addEventListener('click', setupCloudSync);
+    adminPanel.querySelector('#admin-drive-setup')?.addEventListener('click', setupDriveUploadConfig);
     adminPanel.querySelector('#admin-push-sync')?.addEventListener('click', async () => {
       try {
         await pushSyncToRemote('manual');
@@ -2252,17 +2547,20 @@
       pullSyncFromRemote({ manual: true });
     });
     adminPanel.querySelector('#admin-clear-sync')?.addEventListener('click', () => {
-      const confirmed = window.confirm('Clear cloud sync configuration on this device?');
+      const confirmed = window.confirm('Reset cloud sync to predefined defaults on this device?');
       if (!confirmed) return;
       clearSyncConfig();
+      applyPredefinedSyncConfig({ force: true });
       startSyncPolling();
-      window.alert('Cloud sync configuration cleared on this device.');
+      pullSyncFromRemote({ manual: false });
+      window.alert('Cloud sync reset to predefined defaults on this device.');
     });
 
     adminPanel.querySelector('#admin-undo-remove')?.addEventListener('click', undoLastRemoval);
     adminPanel.querySelector('#admin-undo-all')?.addEventListener('click', undoAllRemovals);
 
     adminPanel.querySelector('#admin-lock')?.addEventListener('click', () => {
+      flushPendingSnapshotSave();
       setAdminUnlocked(false);
       makeEditable(false);
       document.documentElement.classList.remove('admin-mode');
@@ -2350,6 +2648,7 @@
     const canUseAdmin = isAdminHostAllowed();
 
     performBackgroundCleanupOnce();
+    applyPredefinedSyncConfig({ force: true });
     applyHeroSettings(loadHeroSettings());
     remapProjectLinks();
     bindProfileUnlockTrigger();
@@ -2359,6 +2658,7 @@
     bindProjectTileNavigation();
     bindTimelineSupportInteractions();
     bindRemoveHandlers();
+    bindEditableAutoSave();
     bindSyncRefreshTriggers();
     startSyncPolling();
     pullSyncFromRemote({ manual: false });
