@@ -41,6 +41,7 @@ html.theme-dark{
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;font-family:'Lato',system-ui,Arial,sans-serif;color:var(--text-main);background:var(--page-bg);transition:background .28s ease,color .28s ease}
 .container{max-width:var(--max-width);margin:0 auto;padding:0 24px}
+body{padding-top:var(--nav-height)}
 main{display:block}
 main > section{position:relative;display:block;width:100%;clear:both}
 body,section,article,div,p,h1,h2,h3,a,button,input,span,li,ul,nav,footer{transition:background-color .24s ease,color .24s ease,border-color .24s ease,box-shadow .24s ease}
@@ -66,7 +67,7 @@ body,section,article,div,p,h1,h2,h3,a,button,input,span,li,ul,nav,footer{transit
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 
 /* Header/Nav */
-.site-header{background:linear-gradient(90deg,var(--nav-bg),#061428);backdrop-filter:blur(4px);position:sticky;top:0;z-index:60;box-shadow:0 2px 18px rgba(2,6,23,0.6)}
+.site-header{background:linear-gradient(90deg,var(--nav-bg),#061428);backdrop-filter:blur(4px);position:fixed;top:0;left:0;right:0;width:100%;z-index:60;box-shadow:0 2px 18px rgba(2,6,23,0.6)}
 .nav{display:flex;align-items:center;justify-content:space-between;height:var(--nav-height)}
 .brand{color:var(--white);font-family:'Montserrat',sans-serif;font-weight:700;text-decoration:none;letter-spacing:1px;font-size:1.03rem}
 .nav-toggle{display:none;background:none;border:0;color:var(--white);padding:8px;cursor:pointer}
