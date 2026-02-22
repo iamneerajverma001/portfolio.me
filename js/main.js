@@ -231,6 +231,32 @@ document.addEventListener('DOMContentLoaded', ()=>{
       normalizeContactButton(mailAnchor, 'Email Me');
       normalizeContactButton(telAnchor, 'Call Me');
     }
+
+    if(!footer.dataset.contactGuardBound){
+      const observer = new MutationObserver(()=>{
+        window.requestAnimationFrame(()=>{
+          const guardFooter = document.querySelector('.site-footer');
+          if(!guardFooter) return;
+
+          const guardActions = guardFooter.querySelector('.contact-actions');
+          if(!guardActions) return;
+
+          const mailAnchor = guardActions.querySelector('a[href^="mailto:"]');
+          const telAnchor = guardActions.querySelector('a[href^="tel:"]');
+          if(mailAnchor){
+            mailAnchor.classList.add('btn', 'neutral', 'footer-btn');
+            if(!(mailAnchor.textContent || '').trim()) mailAnchor.textContent = 'Email Me';
+          }
+          if(telAnchor){
+            telAnchor.classList.add('btn', 'neutral', 'footer-btn');
+            if(!(telAnchor.textContent || '').trim()) telAnchor.textContent = 'Call Me';
+          }
+        });
+      });
+
+      observer.observe(footer, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+      footer.dataset.contactGuardBound = 'true';
+    }
   }
 
   function isRemoveModeActive(){
@@ -278,6 +304,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
   normalizeResearchBackgroundArtifacts();
   initMotionEnhancements();
   ensureFooterContactVisibility();
+  window.setTimeout(ensureFooterContactVisibility, 250);
+  window.setTimeout(ensureFooterContactVisibility, 1200);
+  window.addEventListener('load', ensureFooterContactVisibility, { once: true });
 
   remapProjectLinks();
 
