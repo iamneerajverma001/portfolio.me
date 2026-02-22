@@ -104,6 +104,11 @@ Google Drive upload during edit (image/video/audio)
    - For Google Drive links, playback URL is normalized to Drive `uc?export=download&id=...` format.
    - Videos load via URL and the browser requests data progressively using HTTP range requests when supported.
 
+Security hardening (applied)
+- Frontend no longer includes a hardcoded Drive upload secret.
+- If legacy sync token data exists in browser storage, it is scrubbed automatically when Drive relay is enabled.
+- Use Admin `Drive Upload` to set/rotate secret safely without committing credentials to the repo.
+
 Go live (GitHub Pages)
 - This repo now includes automated deploy workflow: [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml)
 - Push changes to `main`; GitHub Actions deploys the static site to Pages automatically.

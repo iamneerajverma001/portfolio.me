@@ -21,7 +21,7 @@
   const PREDEFINED_SYNC_AUTO_PUSH = true;
   const PREDEFINED_SYNC_POLL_SECONDS = 5;
   const GOOGLE_DRIVE_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzOBVkC2okCm7IyjVjZSbQYM7fMhCTrd5AXZgRjP15rAK4bONVt2suUrN-uCGeDhD5KdA/exec';
-  const GOOGLE_DRIVE_UPLOAD_SECRET = 'Nv29xQ7mT4kL8pZa6cUd1fRy3sWh0JbE';
+  const GOOGLE_DRIVE_UPLOAD_SECRET = '';
   const PUBLIC_AUTO_PULL_STORE_ID = '022f30fe31719e1e69fdd0a9fb2a0215';
   const PUBLIC_AUTO_PULL_ENABLED = true;
   const SYNC_POLL_DEFAULT_SECONDS = 5;
@@ -306,6 +306,19 @@
   function clearSyncConfig() {
     localStorage.removeItem(SYNC_CONFIG_KEY);
     localStorage.removeItem(SYNC_META_KEY);
+  }
+
+  function scrubStoredSyncTokenIfDriveRelayEnabled() {
+    if (!isGoogleDriveUploadConfigured()) return;
+
+    const parsed = safeParse(localStorage.getItem(SYNC_CONFIG_KEY) || '');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+
+    const token = String(parsed.token || '').trim();
+    if (!token) return;
+
+    parsed.token = '';
+    localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(parsed));
   }
 
   function loadSyncMeta() {
@@ -615,48 +628,6 @@
 
     if (!response.ok) {
       const originalError = await readGithubErrorMessage(response, 'Sync push failed');
-
-      if (response.status === 401 && reason === 'manual') {
-        const tokenInput = window.prompt(
-          'GitHub rejected token (401). Paste a fresh PAT with gist scope (optional fallback mode):',
-          ''
-        );
-
-        if (tokenInput !== null) {
-          const retryToken = normalizeTokenInput(tokenInput);
-          if (retryToken) {
-            const retryConfig = { ...config, token: retryToken };
-            saveSyncConfig(retryConfig);
-            startSyncPolling();
-
-            const retryResponse = await githubApiRequest(
-              `https://api.github.com/gists/${encodeURIComponent(retryConfig.syncStoreId || retryConfig.gistId || '')}`,
-              {
-                method: 'PATCH',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(body)
-              },
-              retryConfig.token
-            );
-
-            if (retryResponse.ok) {
-              updateSyncMeta((meta) => {
-                meta.lastPushedAt = payload.updatedAt;
-                return meta;
-              });
-
-              if (adminPanel) {
-                window.alert('Drive Cloud Sync push completed. Token was refreshed.');
-              }
-              return true;
-            }
-
-            throw new Error(await readGithubErrorMessage(retryResponse, 'Sync push failed after token retry'));
-          }
-        }
-      }
 
       throw new Error(originalError);
     }
@@ -2714,6 +2685,7 @@
     const canUseAdmin = isAdminHostAllowed();
 
     performBackgroundCleanupOnce();
+    scrubStoredSyncTokenIfDriveRelayEnabled();
     applyPredefinedSyncConfig({ force: true });
     applyHeroSettings(loadHeroSettings());
     remapProjectLinks();
