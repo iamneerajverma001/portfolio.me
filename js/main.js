@@ -181,6 +181,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const footer = document.querySelector('.site-footer');
     if(!footer) return;
 
+    footer.querySelectorAll('.footer-inner > *').forEach((node)=>{
+      node.classList.remove('motion-reveal');
+      node.classList.add('is-visible');
+      if(!node.style) return;
+      if(node.style.opacity === '0') node.style.removeProperty('opacity');
+      if(node.style.transform) node.style.removeProperty('transform');
+      if(node.style.transitionDelay) node.style.removeProperty('transition-delay');
+    });
+
     const unhideSelectors = ['.contact-info', '.footer-cta', '.contact-actions', '.social'];
     unhideSelectors.forEach((selector)=>{
       footer.querySelectorAll(selector).forEach((node)=>{
@@ -268,7 +277,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if(prefersReducedMotion) return;
 
     const revealTargets = Array.from(document.querySelectorAll(
-      'main > section, .projects-grid .project-link, .skills-grid .skill, .timeline li, .footer-inner > *'
+      'main > section, .projects-grid .project-link, .skills-grid .skill, .timeline li'
     ));
 
     if(!revealTargets.length) return;
@@ -287,8 +296,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     applyStagger('.projects-grid .project-link', 45, 180);
     applyStagger('.skills-grid .skill', 28, 200);
     applyStagger('.timeline li', 32, 220);
-    applyStagger('.footer-inner > *', 60, 120);
-
     const revealObserver = new IntersectionObserver((entries, obs)=>{
       entries.forEach((entry)=>{
         if(!entry.isIntersecting) return;
