@@ -12,7 +12,7 @@
   const SYNC_META_KEY = 'portfolio_sync_meta_v1';
   const SYNC_FILE_DEFAULT = 'portfolio-sync.json';
   const PREDEFINED_SYNC_ENABLED = true;
-  const PREDEFINED_SYNC_GIST_ID = '022f30fe31719e1e69fdd0a9fb2a0215';
+  const PREDEFINED_SYNC_STORE_ID = '022f30fe31719e1e69fdd0a9fb2a0215';
   const PREDEFINED_SYNC_TOKEN = '';
   const PREDEFINED_SYNC_FILE = SYNC_FILE_DEFAULT;
   const PREDEFINED_SYNC_AUTO_PULL = true;
@@ -20,7 +20,7 @@
   const PREDEFINED_SYNC_POLL_SECONDS = 5;
   const GOOGLE_DRIVE_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzOBVkC2okCm7IyjVjZSbQYM7fMhCTrd5AXZgRjP15rAK4bONVt2suUrN-uCGeDhD5KdA/exec';
   const GOOGLE_DRIVE_UPLOAD_SECRET = 'Nv29xQ7mT4kL8pZa6cUd1fRy3sWh0JbE';
-  const PUBLIC_AUTO_PULL_GIST_ID = '022f30fe31719e1e69fdd0a9fb2a0215';
+  const PUBLIC_AUTO_PULL_STORE_ID = '022f30fe31719e1e69fdd0a9fb2a0215';
   const PUBLIC_AUTO_PULL_ENABLED = true;
   const SYNC_POLL_DEFAULT_SECONDS = 5;
   const SYNC_PUSH_DEBOUNCE_MS = 1200;
@@ -204,7 +204,7 @@
     }
 
     const provider = String(parsed.provider || '').trim().toLowerCase();
-    const gistId = String(parsed.gistId || '').trim();
+    const syncStoreId = String(parsed.syncStoreId || parsed.gistId || '').trim();
     const token = normalizeTokenInput(parsed.token || '');
     const fileName = String(parsed.fileName || SYNC_FILE_DEFAULT).trim() || SYNC_FILE_DEFAULT;
     const pollSeconds = parseInt(parsed.pollSeconds, 10);
@@ -212,12 +212,12 @@
     const autoPush = parsed.autoPush !== false;
 
     if (provider !== 'github-gist') return getPredefinedSyncConfig();
-    if (!gistId) return getPredefinedSyncConfig();
+    if (!syncStoreId) return getPredefinedSyncConfig();
     if (!token && !isGoogleDriveUploadConfigured()) return getPredefinedSyncConfig();
 
     return {
       provider,
-      gistId,
+      syncStoreId,
       token,
       fileName,
       pollSeconds: Number.isFinite(pollSeconds) && pollSeconds >= 5 ? pollSeconds : SYNC_POLL_DEFAULT_SECONDS,
@@ -229,9 +229,9 @@
   function getPredefinedSyncConfig() {
     if (!PREDEFINED_SYNC_ENABLED) return null;
 
-    const gistId = normalizeGistIdInput(PREDEFINED_SYNC_GIST_ID);
+    const syncStoreId = normalizeSyncStoreIdInput(PREDEFINED_SYNC_STORE_ID);
     const token = normalizeTokenInput(PREDEFINED_SYNC_TOKEN);
-    if (!gistId) return null;
+    if (!syncStoreId) return null;
 
     const pollSeconds = Math.max(5, parseInt(PREDEFINED_SYNC_POLL_SECONDS, 10) || SYNC_POLL_DEFAULT_SECONDS);
     const autoPull = PREDEFINED_SYNC_AUTO_PULL !== false;
@@ -239,7 +239,7 @@
 
     return {
       provider: 'github-gist',
-      gistId,
+      syncStoreId,
       token,
       fileName: String(PREDEFINED_SYNC_FILE || SYNC_FILE_DEFAULT).trim() || SYNC_FILE_DEFAULT,
       pollSeconds,
@@ -266,13 +266,13 @@
   }
 
   function getPublicPullConfig() {
-    if (!PUBLIC_AUTO_PULL_ENABLED || !PUBLIC_AUTO_PULL_GIST_ID) {
+    if (!PUBLIC_AUTO_PULL_ENABLED || !PUBLIC_AUTO_PULL_STORE_ID) {
       return null;
     }
 
     return {
       provider: 'github-gist',
-      gistId: PUBLIC_AUTO_PULL_GIST_ID,
+      syncStoreId: PUBLIC_AUTO_PULL_STORE_ID,
       token: '',
       fileName: SYNC_FILE_DEFAULT,
       pollSeconds: SYNC_POLL_DEFAULT_SECONDS,
@@ -346,7 +346,7 @@
     return 0;
   }
 
-  function normalizeGistIdInput(value) {
+  function normalizeSyncStoreIdInput(value) {
     const raw = String(value || '').trim();
     if (!raw) return '';
 
@@ -431,7 +431,7 @@
       body: JSON.stringify({
         action,
         secret: String(driveConfig?.secret || ''),
-        gistId: String(config?.gistId || ''),
+        syncStoreId: String(config?.syncStoreId || config?.gistId || ''),
         fileName: String(config?.fileName || SYNC_FILE_DEFAULT),
         payload: payload || null
       }),
@@ -469,7 +469,7 @@
     }
 
     const response = await githubApiRequest(
-      `https://api.github.com/gists/${encodeURIComponent(config.gistId)}`,
+      `https://api.github.com/gists/${encodeURIComponent(config.syncStoreId || config.gistId || '')}`,
       { method: 'GET' },
       config.token
     );
@@ -521,7 +521,7 @@
     }
   }
 
-  async function fetchGistSyncPayload(config) {
+  async function fetchSyncStorePayload(config) {
     if (!config.token && isGoogleDriveUploadConfigured()) {
       const relayResult = await requestSyncRelay('syncPull', config, null);
       const relayPayload = relayResult.payload;
@@ -532,7 +532,7 @@
     }
 
     const response = await githubApiRequest(
-      `https://api.github.com/gists/${encodeURIComponent(config.gistId)}`,
+      `https://api.github.com/gists/${encodeURIComponent(config.syncStoreId || config.gistId || '')}`,
       { method: 'GET' },
       config.token
     );
@@ -541,8 +541,8 @@
       throw new Error(await readGithubErrorMessage(response, 'Sync pull failed'));
     }
 
-    const gist = await response.json();
-    const files = gist && gist.files ? gist.files : {};
+    const remoteStore = await response.json();
+    const files = remoteStore && remoteStore.files ? remoteStore.files : {};
     const preferred = files[config.fileName];
     const firstFile = preferred || Object.values(files)[0];
     let content = firstFile && typeof firstFile.content === 'string' ? firstFile.content : '';
@@ -600,7 +600,7 @@
     };
 
     const response = await githubApiRequest(
-      `https://api.github.com/gists/${encodeURIComponent(config.gistId)}`,
+      `https://api.github.com/gists/${encodeURIComponent(config.syncStoreId || config.gistId || '')}`,
       {
         method: 'PATCH',
         headers: {
@@ -628,7 +628,7 @@
             startSyncPolling();
 
             const retryResponse = await githubApiRequest(
-              `https://api.github.com/gists/${encodeURIComponent(retryConfig.gistId)}`,
+              `https://api.github.com/gists/${encodeURIComponent(retryConfig.syncStoreId || retryConfig.gistId || '')}`,
               {
                 method: 'PATCH',
                 headers: {
@@ -689,16 +689,16 @@
       let payload;
 
       try {
-        payload = await fetchGistSyncPayload(effectiveConfig);
+        payload = await fetchSyncStorePayload(effectiveConfig);
       } catch (primaryError) {
         const publicConfig = getPublicPullConfig();
-        const canFallback = !manual && publicConfig && effectiveConfig.gistId !== publicConfig.gistId;
+        const canFallback = !manual && publicConfig && (effectiveConfig.syncStoreId || effectiveConfig.gistId) !== (publicConfig.syncStoreId || publicConfig.gistId);
 
         if (!canFallback) {
           throw primaryError;
         }
 
-        payload = await fetchGistSyncPayload(publicConfig);
+        payload = await fetchSyncStorePayload(publicConfig);
         effectiveConfig = publicConfig;
       }
 
